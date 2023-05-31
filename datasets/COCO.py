@@ -18,9 +18,8 @@ def labelIdMap(label_list_dir, names):
             category = l.split(':')[1][1:]
             if category in names:
                 label_id_map[category] = int(id) - 1
-            else:
-                print(f"{category} not found!")
     return label_id_map
+
 
 def CategoryImageFileNamePickle(thing_json_dir, stuff_json_dir, label_list_dir):
     mode = os.path.basename(stuff_json_dir).split(".")[0].split("_")[1][:-4]
@@ -51,9 +50,9 @@ def CategoryImageFileNamePickle(thing_json_dir, stuff_json_dir, label_list_dir):
 
 
 if __name__ == "__main__":
-    CategoryImageFileNamePickle("COCO/thing_annotations/instances_train2017.json",
-                                "COCO/stuff_annotations/stuff_train2017.json",
+    CategoryImageFileNamePickle("COCO/annotations/thing_train2017.json",
+                                "COCO/annotations/stuff_train2017.json",
                                 "COCO/labels.txt")
-    CategoryImageFileNamePickle("COCO/thing_annotations/instances_val2017.json",
-                                "COCO/stuff_annotations/stuff_val2017.json",
+    CategoryImageFileNamePickle("COCO/annotations/thing_val2017.json",
+                                "COCO/annotations/stuff_val2017.json",
                                 "COCO/labels.txt")
