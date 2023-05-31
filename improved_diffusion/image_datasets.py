@@ -152,7 +152,7 @@ class COCODataset(Dataset):
     def _load_img_label(self, path):
         img = Image.open(os.path.join(self.root, "train2017" if self.train else "val2017", path))
         label = Image.open(os.path.join(self.root,
-                                        "stuffthingmaps_trainval2017",
+                                        "annotations",
                                         "train2017" if self.train else "val2017",
                                         path.replace(".jpg", ".png")))
         img = img.resize((self.resolution, self.resolution))
