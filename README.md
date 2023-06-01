@@ -3,7 +3,7 @@ If you failed when installing the package `mpi4py` on AI-cluster (`10.15.89.191/
 ### Option 1: Install with pip
 The original installation with `pip` failed as it cannot find the `mpi` compilers. You can get the access of the compilers with following steps:
 ```bash
-$> mpi-selecor-menu
+mpi-selecor-menu
 ```
 Then you can choose the `openmpi` compiler for `user`. After that, you can install the package with `pip`:
 ```bash
