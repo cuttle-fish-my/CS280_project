@@ -178,7 +178,9 @@ class COCOCategoryLoaderDataLoader(DataLoader):
     def __iter__(self):
         while True:
             idx = self.sampler.__iter__().__next__()
-            yield iter(self.dataset[idx])
+            loader = self.dataset[idx]
+            batch = loader.__iter__().__next__()
+            yield batch
 
 
 class COCODataset(Dataset):
@@ -209,7 +211,8 @@ class COCODataset(Dataset):
         return {
             "img": img,
             "label": label,
-            "idx": idx
+            "idx": idx,
+            "category": self.category
         }
 
     def _load_img_label(self, path):
@@ -266,6 +269,7 @@ if __name__ == "__main__":
     coco = COCOCategoryLoaderDataset(128, "../datasets/COCO", "../datasets/COCO/train_filenames.pkl",
                                      "../datasets/COCO/categories.pkl", batch_size=2, shuffle=True, num_workers=0)
     dataloader = COCOCategoryLoaderDataLoader(dataset=coco, num_workers=0)
-    for loader in dataloader:
-        batch = next(iter(loader))
-        print(batch['img'].shape)
+    for batch in dataloader:
+        print(batch['category'])
+        print(batch['idx'])
+
