@@ -53,16 +53,32 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
 class FiLM(nn.Module):
     """Feature-wise linear modulation."""
 
-    def __init__(self, features: int, emb_ch=1024):
+    def __init__(self, H:int, W:int, channel_num:int, C:int=1):
         super().__init__()
-        self.features = features
-        self.dense = nn.Linear(emb_ch, 2 * features)
+        emb_ch = H * W * C
+        self.H = H
+        self.W = W
+        self.C = C
+        self.channel_num = channel_num
+        self.flat = nn.Flatten(start_dim=2)
+        self.dense = nn.Linear(emb_ch, 2 * channel_num)
 
-    def forward(self, h, emb):
-        emb = self.dense(nn.functional.silu(emb.transpose(-1, -3))).transpose(-1, -3)
-        scale, shift = th.split(emb, self.features, dim=-3)
+    def forward(self, support: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            support: [B, S, C', H', W']
+            label: [B, S, 1, H, W]
+        Out:
+            support: [B, S, C', H', W']
+        """
+        B, S, *_ = label.shape
+        label = self.flat(label)
+        label = label.reshape((B*S, label.shape[-1]))
+        emb = self.dense(label)
+        emb = emb.reshape((B, S, emb.shape[-1]))
+        scale, shift = th.split(emb, self.channel_num, dim=-1)
 
-        return h * (1. + scale) + shift
+        return support * (1. + scale) + shift
 
 
 class Upsample(nn.Module):
@@ -762,7 +778,9 @@ class CrossConvolutionDecoder(nn.Module):
         use_checkpoint=False,
         num_heads=1,
         num_heads_upsample=-1,
-        use_scale_shift_norm=False
+        use_scale_shift_norm=False,
+        original_H=None,
+        original_W=None
     ) -> None:
         super().__init__()
         
@@ -781,6 +799,9 @@ class CrossConvolutionDecoder(nn.Module):
         self.use_checkpoint = use_checkpoint
         self.num_heads = num_heads
         self.num_heads_upsample = num_heads_upsample
+        assert original_W is not None and original_H is not None, "please give the original spatial resolution as input"
+        self.original_H = original_H
+        self.original_W = original_W
 
         assert self.num_classes is None
 
@@ -830,6 +851,11 @@ class CrossConvolutionDecoder(nn.Module):
         for level, mult in list(enumerate(channel_mult))[::-1]:
             for i in range(num_res_blocks + 1):
                 layers = [
+                    FiLM(
+                        self.original_H, 
+                        self.original_W, 
+                        ch
+                    ),
                     DecoderBlock(
                         ch + input_block_chans.pop(),
                         model_channels * mult,
@@ -878,12 +904,15 @@ class CrossConvolutionDecoder(nn.Module):
         else:
             print("only handle support in length 4 or 5 in shape, having:", len(support.shape), support.shape)
         for module in self.decoder:
-            hidden_t = hs_t.pop()
-            hidden_s = hs_s.pop()
-            cat_target = torch.cat([target, hidden_t], dim=1)
-            cat_support = torch.cat([support, hidden_s], dim=1)
+            if isinstance(module, FiLM):
+                support = module(support, label)
+            else:
+                hidden_t = hs_t.pop()
+                hidden_s = hs_s.pop()
+                cat_target = torch.cat([target, hidden_t], dim=1)
+                cat_support = torch.cat([support, hidden_s], dim=1)
 
-            target, support = module(cat_target, cat_support)
+                target, support = module(cat_target, cat_support)
         target = target.type(target.dtype)
         return self.out(target)
         raise NotImplementedError
