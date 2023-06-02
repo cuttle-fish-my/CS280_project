@@ -1,8 +1,9 @@
 import argparse
+import torch
 import os
 import sys
+
 sys.path.append(os.path.dirname(sys.path[0]))
-import torch
 
 from improved_diffusion import dist_util, logger
 from improved_diffusion.image_datasets import COCOCategoryLoaderDataset as Dataset
