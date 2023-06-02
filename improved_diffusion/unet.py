@@ -2,8 +2,10 @@ from abc import abstractmethod
 
 import math
 import copy
+from typing import Tuple
 
 import numpy as np
+import torch
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
@@ -251,13 +253,6 @@ class DecoderResBlock(nn.Module):
             SiLU(),
             conv_nd(dims, channels, self.out_channels, 3, padding=1),
         )
-        # self.emb_layers = nn.Sequential(
-        #     SiLU(),
-        #     linear(
-        #         emb_channels,
-        #         2 * self.out_channels if use_scale_shift_norm else self.out_channels,
-        #     ),
-        # )
         self.out_layers = nn.Sequential(
             normalization(self.out_channels),
             SiLU(),
@@ -276,35 +271,112 @@ class DecoderResBlock(nn.Module):
         else:
             self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
 
-    # ORIGINAL FORWARD
-    # def forward(self, x, emb):
-    #     """
-    #     Apply the block to a Tensor, conditioned on a timestep embedding.
-
-    #     :param x: an [N x C x ...] Tensor of features.
-    #     :param emb: an [N x emb_channels] Tensor of timestep embeddings.
-    #     :return: an [N x C x ...] Tensor of outputs.
-    #     """
-    #     return checkpoint(
-    #         self._forward, (x, emb), self.parameters(), self.use_checkpoint
-    #     )
-
     def forward(self, x):
         h = self.in_layers(x)
-        # emb_out = self.emb_layers(emb).type(h.dtype)
-        # while len(emb_out.shape) < len(h.shape):
-        #     emb_out = emb_out[..., None]
         if self.use_scale_shift_norm:
             print("no time embed here")
             raise NotImplementedError
-        #     out_norm, out_rest = self.out_layers[0], self.out_layers[1:]
-        #     scale, shift = th.chunk(emb_out, 2, dim=1)
-        #     h = out_norm(h) * (1 + scale) + shift
-        #     h = out_rest(h)
         else:
-            # h = h + emb_out
             h = self.out_layers(h)
         return self.skip_connection(x) + h
+    
+
+class DecoderBlock(nn.Module):
+    ### NOTE: CrossConvolution, Convolution and Upsample block are needed
+    pass
+
+
+class DecoderCrossConvBlock(nn.Module):
+    def __init__(self, in_channel: Tuple[int, int], out_channel, kernel_size:int=3) -> None:
+        super().__init__()
+        self.in_channel = in_channel
+        self.out_channel = out_channel
+        self.kernel_size = kernel_size
+        if isinstance(in_channel, int):
+            self.in_channel = (in_channel, in_channel)
+        if isinstance(in_channel, (list, tuple)):
+            assert len(in_channel) == 2
+        else:
+            raise NotImplementedError
+        self.concat_channel = self.in_channel[0] + self.in_channel[1]
+        self.conv = nn.Conv2d(
+            self.concat_channel, 
+            self.out_channel,
+            self.kernel_size,
+            stride=1,
+            padding=self.kernel_size//2,
+        )
+
+    def forward(self, target: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            target: [B, Ct, H, W]
+            support: [B, S, Cs, H, W]
+        Return:
+            target: [B, Co, H, W]
+            support: [B, S, Co, H, W]
+        """
+        B, Ct, H, W = target.shape
+        _, S, Cs, _, _ = support.shape
+        assert target.shape[0] == support.shape[0]
+        assert target.shape[2:] == support.shape[3:]
+        assert Ct + Cs == self.concat_channel
+        if Ct != Cs:
+            print("Warning: Ct != Cs, the program will proceed but you should check the inputs!")
+        target = target[:, None].repeat(1, S, 1, 1, 1)
+        # support = support[None].repeat(B, 1, 1, 1, 1)
+        concat = torch.cat([target, support], dim=2)
+        concat = concat.reshape(B*S, self.concat_channel, H, W)
+        out = self.conv(concat)
+        out = out.reshape(B, S, self.out_channel, H, W)
+        target = out.mean(dim=1)
+        support = out
+        return target, support
+
+
+class DecoderConvBlock(nn.Module):
+    pass
+
+
+class DecoderUpsampleBlock(nn.Module):
+    """
+    An upsampling layer with an optional convolution.
+
+    :param channels: channels in the inputs and outputs.
+    :param use_conv: a bool determining if a convolution is applied.
+    """
+
+    def __init__(self, channels, use_conv):
+        super().__init__()
+        self.channels = channels
+        self.use_conv = use_conv
+        self.dims = 2
+        if use_conv:
+            self.conv_t = conv_nd(2, channels, channels, 3, padding=1)
+            self.conv_s = conv_nd(2, channels, channels, 3, padding=1)
+
+    def forward(self, target, support):
+        """
+        Args:
+            target: [B, C, H, W]
+            support: [B, S, C, H, W]
+        Return:
+            target: [B, C, H', W']
+            support: [B, S, C, H', W']
+        """
+        assert target.shape[1] == self.channels
+        assert support.shape[2] == self.channels
+        # if self.dims == 3:
+        #     x = F.interpolate(
+        #         x, (x.shape[2], x.shape[3] * 2, x.shape[4] * 2), mode="nearest"
+        #     )
+        # else:
+        target = F.interpolate(target, scale_factor=2, mode="nearest")
+        support = F.interpolate(support, scale_factor=2, mode="nearest")
+        if self.use_conv:
+            target = self.conv_t(target)
+            support = self.conv_s(support)
+        return target, support
 
 
 class AttentionBlock(nn.Module):
