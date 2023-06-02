@@ -362,7 +362,11 @@ class DecoderBlock(nn.Module):
             self.cross_channel,
             kernel_size=self.kernel_size,
         )
-        self.conv = DecoderConvBlock()
+        self.conv = DecoderConvBlock(
+            self.in_channel[0], 
+            self.cross_channel,
+            kernel_size=self.kernel_size,
+        )
 
     def forward(self, target: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
         """
@@ -431,7 +435,6 @@ class DecoderCrossConvBlock(nn.Module):
 
 
 # need to be checked:
-# nonlinear needed? LeakyReLU()?
 class DecoderConvBlock(nn.Module):
     # TODO: Convolutions part 
     def __init__(self, in_channel, out_channel, kernel_size:int=3) -> None:
@@ -455,12 +458,13 @@ class DecoderConvBlock(nn.Module):
             padding_mode="zeros",
             bias=True,
         )
-        self.nonlin = nn.LeakyReLU()
+        # nonlinear needed? LeakyReLU()?
+        # self.nonlin = nn.LeakyReLU()
 
-    def forward(self, x: torch.Tensor):
-        x = self.conv(x)
-        x = self.nonlin(x)
-        return x
+    def forward(self, target: torch.Tensor, support: torch.Tensor):
+        target = self.conv(target)
+        support = self.conv(support)
+        return target, support
 
 
 class Upsample2in2out(nn.Module):
