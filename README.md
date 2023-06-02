@@ -34,15 +34,19 @@ NOT DONE YET..
 ModuleNotFoundError: No module named 'improved_diffusion'
 ``
 Then you have several options to solve this problem:
-1. Add the path of `improved-diffusion` to `PYTHONPATH` in your terminal:
+1. Add the path of `improved-diffusion` to `PYTHONPATH` in your terminal (need to be done every time you open a new terminal)
     ```bash
     export PYTHONPATH=$PYTHONPATH:$(pwd)
     ```
-2.  OR you can add the following code to the beginning of `train.py` (already added):
+2.  OR you can add the following code to the beginning of `train.py` (already added) (permanent):
     ```python
     import os
     import sys
     sys.path.append(os.path.dirname(sys.path[0]))
+    ```
+3. Install `improved-diffusion` as a package in editable mode (permanent):
+    ```bash
+    pip install -e .
     ```
 
 ## `mpi4py` installation on AI-cluster
