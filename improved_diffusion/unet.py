@@ -282,7 +282,45 @@ class DecoderResBlock(nn.Module):
     
 
 class DecoderBlock(nn.Module):
-    ### NOTE: CrossConvolution, Convolution and Upsample block are needed
+    ### NOTE: CrossConvolution, Convolution are needed
+    def __init__(self, in_channel, out_channel, cross_channel=None, kernel_size:int=3) -> None:
+        super().__init__()
+        self.in_channel = in_channel
+        self.out_channel = out_channel
+        self.kernel_size = kernel_size
+        self.cross_channel = cross_channel or out_channel
+
+        if isinstance(self.in_channel, int):
+            self.in_channel = (self.in_channel, self.in_channel)
+        if isinstance(self.in_channel, (list, tuple)):
+            assert len(self.in_channel) == 2
+            if self.in_channel[0] != self.in_channel[1]:
+                print("Warning: in_channel[0] != in_channel[1], check initialization of decoder block")
+        else:
+            raise NotImplementedError
+
+        self.crossconv = DecoderCrossConvBlock(
+            self.in_channel[0], 
+            self.cross_channel,
+            kernel_size=self.kernel_size,
+        )
+        self.conv = DecoderConvBlock()
+
+    def forward(self, target: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            target (torch.Tensor): [B, Ct, H', W']
+            support (torch.Tensor): [B, S, Cs, H', W']
+        Output:
+            target (torch.Tensor): [B, Co, H, W]
+            support (torch.Tensor): [B, S, Co, H, W]
+        """
+        assert target.shape[0] == support.shape[0]
+        assert target.shape[2:] == support.shape[3:]
+        target, support = self.crossconv(target, support)
+        target, support = self.conv(target, support)
+        return target, support
+
     pass
 
 
@@ -335,10 +373,13 @@ class DecoderCrossConvBlock(nn.Module):
 
 
 class DecoderConvBlock(nn.Module):
-    pass
+    # TODO: Convolutions part 
+    def __init__(self) -> None:
+        super().__init__()
+        raise NotImplementedError
 
 
-class DecoderUpsampleBlock(nn.Module):
+class Upsample2in2out(nn.Module):
     """
     An upsampling layer with an optional convolution.
 
@@ -786,6 +827,19 @@ class CrossConvolutionDecoder(nn.Module):
 
         ### Replace blocks(layers) in decoder with cross convolution layer
         self.decoder = nn.ModuleList([])
+        for level, mult in list(enumerate(channel_mult))[::-1]:
+            for i in range(num_res_blocks + 1):
+                layers = [
+                    DecoderBlock(
+                        ch + input_block_chans.pop(),
+                        model_channels * mult,
+                    )
+                ]
+                ch = model_channels * mult
+                if level and i == num_res_blocks:
+                    layers.append(Upsample2in2out(ch, conv_resample))
+                    ds //= 2
+                self.decoder.append(TimestepEmbedSequential(*layers))
 
         ### The output block is retained
         self.out = nn.Sequential(
@@ -794,7 +848,7 @@ class CrossConvolutionDecoder(nn.Module):
             zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
         )
     
-    def forward(self, target, support, label, hs_t, hs_s):
+    def forward(self, target: torch.Tensor, support: torch.Tensor, label: torch.Tensor, hs_t: list, hs_s: list):
         '''
         Input:
             H and W is for the original spatial resolution
@@ -802,16 +856,36 @@ class CrossConvolutionDecoder(nn.Module):
             S is for number of images in the support set
             The batch dimension for the support and label is removed as a batch share the whole support set
             
-            target: [N, C', H', W']
-            support: [S, C', H', W']
-            label: [S, C, H, W]
+            target: [B, C', H', W']
+            support: [B, S, C', H', W'] / [S, C', H', W']
+            label: [B, S, C, H, W] / [S, C, H, W]
             hs_t: List of hidden states from the target encoder
             hs_s: List of hidden states from the encoder
         Output:
-            out: [N, out_channel, H, W]
+            out: [B, out_channel, H, W]
         Like what is done in Unet decoder, first concatenation then pass to model
         '''
-        pass
+        B, *_ = target.shape
+        if len(label.shape) != len(support.shape):
+            print("the label shape length and support length is not consistent, please check")
+            raise ValueError
+        if len(support.shape) == 4:
+            assert support.shape[0] == label.shape[0]
+            support = support[None].repeat(B, 1, 1, 1, 1)
+        elif len(support.shape) == 5:
+            assert support.shape[0] == target.shape[0]
+            assert support.shape[:2] == label.shape[:2]
+        else:
+            print("only handle support in length 4 or 5 in shape, having:", len(support.shape), support.shape)
+        for module in self.decoder:
+            hidden_t = hs_t.pop()
+            hidden_s = hs_s.pop()
+            cat_target = torch.cat([target, hidden_t], dim=1)
+            cat_support = torch.cat([support, hidden_s], dim=1)
+
+            target, support = module(cat_target, cat_support)
+        target = target.type(target.dtype)
+        return self.out(target)
         raise NotImplementedError
 
 
