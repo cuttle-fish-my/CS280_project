@@ -430,11 +430,37 @@ class DecoderCrossConvBlock(nn.Module):
         return target, support
 
 
+# need to be checked:
+# nonlinear needed? LeakyReLU()?
 class DecoderConvBlock(nn.Module):
     # TODO: Convolutions part 
-    def __init__(self) -> None:
+    def __init__(self, in_channel, out_channel, kernel_size:int=3) -> None:
         super().__init__()
-        raise NotImplementedError
+        self.in_channel = in_channel
+        self.out_channel = out_channel
+        self.kernel_size = kernel_size
+        if isinstance(in_channel, int):
+            self.in_channel = (in_channel, in_channel)
+        if isinstance(in_channel, (list, tuple)):
+            assert len(in_channel) == 2
+        else:
+            raise NotImplementedError
+        
+        self.conv = nn.Conv2d(
+            in_channels=self.in_channels,
+            out_channels=self.out_channels,
+            kernel_size=self.kernel_size,
+            stride=1,
+            padding=self.kernel_size // 2,
+            padding_mode="zeros",
+            bias=True,
+        )
+        self.nonlin = nn.LeakyReLU()
+
+    def forward(self, x: torch.Tensor):
+        x = self.conv(x)
+        x = self.nonlin(x)
+        return x
 
 
 class Upsample2in2out(nn.Module):
