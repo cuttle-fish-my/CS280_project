@@ -81,6 +81,48 @@ class FiLM(nn.Module):
         return support * (1. + scale) + shift
 
 
+class SENetBlock(nn.Module):
+    '''channel-wise modulation'''
+    def __init__(self, ch:int, factor:int=16) -> None:
+        super().__init__()
+        self.ch = ch
+        self.factor = factor
+        self.avgpool = nn.AdaptiveAvgPool2d((1,1))
+        self.fc1 = nn.Linear(ch, ch // factor)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(ch // factor, ch)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, target: torch.Tensor, hs_t: list) -> torch.Tensor:
+        """
+        Args:
+            target: [B, C1, H, W]
+            hs_t: list of [B, Cn, H, W]
+        Out: 
+            new_target: [B, C1, H, W]
+            new_hs_t: list of [B, Cn, H, W]
+        """
+        list_tensor = []
+        list_channels = []
+        list_channels.append(target.shape[1])
+        # target = self.avgpool(target)
+        list_tensor.append(self.avgpool(target).squeeze())
+        for h in hs_t:
+            list_channels.append(h.shape[1])
+            # h = self.avgpool(h)
+            list_tensor.append(self.avgpool(h).squeeze())
+        stacked_tensor = torch.stack(list_tensor, dim=1)
+        stacked_tensor = self.fc1(stacked_tensor)
+        stacked_tensor = self.relu(stacked_tensor)
+        stacked_tensor = self.fc2(stacked_tensor)
+        stacked_tensor = self.sigmoid(stacked_tensor)
+        list_tensor = torch.split(stacked_tensor, list_channels, dim=1)
+        list_tensor = [t.unsqueeze(2).unsqueeze(3) for t in list_tensor]
+        new_target = target * list_tensor[0]
+        new_hs_t = [h * t for h, t in zip(hs_t, list_tensor[1:])]
+        return new_target, new_hs_t
+
+
 class Upsample(nn.Module):
     """
     An upsampling layer with an optional convolution.
@@ -311,7 +353,7 @@ class DecoderBlock(nn.Module):
         if isinstance(self.in_channel, (list, tuple)):
             assert len(self.in_channel) == 2
             if self.in_channel[0] != self.in_channel[1]:
-                print("Warning: in_channel[0] != in_channel[1], check initialization of decoder block")
+                print("WARNING: in_channel[0] != in_channel[1], check initialization of decoder block")
         else:
             raise NotImplementedError
 
@@ -376,7 +418,7 @@ class DecoderCrossConvBlock(nn.Module):
         assert target.shape[2:] == support.shape[3:]
         assert Ct + Cs == self.concat_channel
         if Ct != Cs:
-            print("Warning: Ct != Cs, the program will proceed but you should check the inputs!")
+            print("WARNING: Ct != Cs, the program will proceed but wrong answer will get and you should check the inputs!")
         target = target[:, None].repeat(1, S, 1, 1, 1)
         # support = support[None].repeat(B, 1, 1, 1, 1)
         concat = torch.cat([target, support], dim=2)
@@ -847,15 +889,19 @@ class CrossConvolutionDecoder(nn.Module):
                 self.decoder.append(TimestepEmbedSequential(*layers))
 
         ### Replace blocks(layers) in decoder with cross convolution layer
+        channel_sum = ch + sum(input_block_chans)
+        self.SENetBlock = SENetBlock(channel_sum)
         self.decoder = nn.ModuleList([])
         for level, mult in list(enumerate(channel_mult))[::-1]:
             for i in range(num_res_blocks + 1):
-                layers = [
+                self.decoder.append(
                     FiLM(
                         self.original_H, 
                         self.original_W, 
                         ch
-                    ),
+                    )
+                )
+                layers = [
                     DecoderBlock(
                         ch + input_block_chans.pop(),
                         model_channels * mult,
@@ -903,6 +949,9 @@ class CrossConvolutionDecoder(nn.Module):
             assert support.shape[:2] == label.shape[:2]
         else:
             print("only handle support in length 4 or 5 in shape, having:", len(support.shape), support.shape)
+
+        target, hs_t = self.SENetBlock(target, hs_t)
+
         for module in self.decoder:
             if isinstance(module, FiLM):
                 support = module(support, label)
