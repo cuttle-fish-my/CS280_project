@@ -29,6 +29,22 @@ where ``--batch_size`` should be determined by your GPU
 ### Multi-GPU training
 NOT DONE YET..
 
+*Note:* If you encountered the error like:
+``
+ModuleNotFoundError: No module named 'improved_diffusion'
+``
+Then you have several options to solve this problem:
+1. Add the path of `improved-diffusion` to `PYTHONPATH` in your terminal:
+    ```bash
+    export PYTHONPATH=$PYTHONPATH:$(pwd)
+    ```
+2.  OR you can add the following code to the beginning of `train.py` (already added):
+    ```python
+    import os
+    import sys
+    sys.path.append(os.path.dirname(sys.path[0]))
+    ```
+
 ## `mpi4py` installation on AI-cluster
 If you failed when installing the package `mpi4py` on AI-cluster (`10.15.89.191/192`), you can try to install the package with the following options:
 ### Option 1: Install with pip
