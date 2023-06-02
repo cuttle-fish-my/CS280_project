@@ -213,6 +213,100 @@ class ResBlock(TimestepBlock):
         return self.skip_connection(x) + h
 
 
+class DecoderResBlock(nn.Module):
+    """
+    A residual block that can optionally change the number of channels.
+
+    :param channels: the number of input channels.
+    :param dropout: the rate of dropout.
+    :param out_channels: if specified, the number of out channels.
+    :param use_conv: if True and out_channels is specified, use a spatial
+        convolution instead of a smaller 1x1 convolution to change the
+        channels in the skip connection.
+    :param dims: determines if the signal is 1D, 2D, or 3D.
+    :param use_checkpoint: if True, use gradient checkpointing on this module.
+    """
+
+    def __init__(
+        self,
+        channels,
+        dropout,
+        out_channels=None,
+        use_conv=False,
+        use_scale_shift_norm=False,
+        dims=2,
+        use_checkpoint=False,
+    ):
+        super().__init__()
+        self.channels = channels
+        # self.emb_channels = emb_channels
+        self.dropout = dropout
+        self.out_channels = out_channels or channels
+        self.use_conv = use_conv
+        self.use_checkpoint = use_checkpoint
+        self.use_scale_shift_norm = use_scale_shift_norm
+
+        self.in_layers = nn.Sequential(
+            normalization(channels),
+            SiLU(),
+            conv_nd(dims, channels, self.out_channels, 3, padding=1),
+        )
+        # self.emb_layers = nn.Sequential(
+        #     SiLU(),
+        #     linear(
+        #         emb_channels,
+        #         2 * self.out_channels if use_scale_shift_norm else self.out_channels,
+        #     ),
+        # )
+        self.out_layers = nn.Sequential(
+            normalization(self.out_channels),
+            SiLU(),
+            nn.Dropout(p=dropout),
+            zero_module(
+                conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1)
+            ),
+        )
+
+        if self.out_channels == channels:
+            self.skip_connection = nn.Identity()
+        elif use_conv:
+            self.skip_connection = conv_nd(
+                dims, channels, self.out_channels, 3, padding=1
+            )
+        else:
+            self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
+
+    # ORIGINAL FORWARD
+    # def forward(self, x, emb):
+    #     """
+    #     Apply the block to a Tensor, conditioned on a timestep embedding.
+
+    #     :param x: an [N x C x ...] Tensor of features.
+    #     :param emb: an [N x emb_channels] Tensor of timestep embeddings.
+    #     :return: an [N x C x ...] Tensor of outputs.
+    #     """
+    #     return checkpoint(
+    #         self._forward, (x, emb), self.parameters(), self.use_checkpoint
+    #     )
+
+    def forward(self, x):
+        h = self.in_layers(x)
+        # emb_out = self.emb_layers(emb).type(h.dtype)
+        # while len(emb_out.shape) < len(h.shape):
+        #     emb_out = emb_out[..., None]
+        if self.use_scale_shift_norm:
+            print("no time embed here")
+            raise NotImplementedError
+        #     out_norm, out_rest = self.out_layers[0], self.out_layers[1:]
+        #     scale, shift = th.chunk(emb_out, 2, dim=1)
+        #     h = out_norm(h) * (1 + scale) + shift
+        #     h = out_rest(h)
+        else:
+            # h = h + emb_out
+            h = self.out_layers(h)
+        return self.skip_connection(x) + h
+
+
 class AttentionBlock(nn.Module):
     """
     An attention block that allows spatial positions to attend to each other.
@@ -558,27 +652,90 @@ class CrossConvolutionDecoder(nn.Module):
         use_scale_shift_norm=False
     ) -> None:
         super().__init__()
-        temp_unet = UNetModel(
-            in_channels,
-            model_channels,
-            out_channels,
-            num_res_blocks,
-            attention_resolutions,
-            dropout,
-            channel_mult,
-            conv_resample,
-            dims,
-            num_classes,
-            False,
-            num_heads,
-            num_heads_upsample,
-            use_scale_shift_norm,
-        )
+        
+        if num_heads_upsample == -1:
+            num_heads_upsample = num_heads
+
+        self.in_channels = in_channels
         self.model_channels = model_channels
         self.out_channels = out_channels
+        self.num_res_blocks = num_res_blocks
+        self.attention_resolutions = attention_resolutions
+        self.dropout = dropout
+        self.channel_mult = channel_mult
+        self.conv_resample = conv_resample
+        self.num_classes = num_classes
+        self.use_checkpoint = use_checkpoint
+        self.num_heads = num_heads
+        self.num_heads_upsample = num_heads_upsample
+
+        assert self.num_classes is None
+        # temp_unet = UNetModel(
+        #     in_channels,
+        #     model_channels,
+        #     out_channels,
+        #     num_res_blocks,
+        #     attention_resolutions,
+        #     dropout,
+        #     channel_mult,
+        #     conv_resample,
+        #     dims,
+        #     num_classes,
+        #     False,
+        #     num_heads,
+        #     num_heads_upsample,
+        #     use_scale_shift_norm,
+        # )
 
         # NOTE: this decoder requires time step embedding and cannot be splitted, rewrite
-        self.decoder = copy.deepcopy(temp_unet.output_blocks)
+        # self.decoder = copy.deepcopy(temp_unet.output_blocks)
+        
+        input_block_chans = [model_channels]
+        ds = 1
+        for level, mult in enumerate(channel_mult):
+            for _ in range(num_res_blocks):
+                ch = mult * model_channels
+                input_block_chans.append(ch)
+            if level != len(channel_mult) - 1:
+                input_block_chans.append(ch)
+                ds *= 2
+        
+        self.decoder = nn.ModuleList([])
+        for level, mult in list(enumerate(channel_mult))[::-1]:
+            for i in range(num_res_blocks + 1):
+                layers = [
+                    # ResBlock(
+                    #     ch + input_block_chans.pop(),
+                    #     time_embed_dim,
+                    #     dropout,
+                    #     out_channels=model_channels * mult,
+                    #     dims=dims,
+                    #     use_checkpoint=use_checkpoint,
+                    #     use_scale_shift_norm=use_scale_shift_norm,
+                    # )
+                    DecoderResBlock(
+                        ch + input_block_chans.pop(),
+                        dropout,
+                        out_channels=model_channels * mult,
+                        dims=dims,
+                        use_checkpoint=use_checkpoint,
+                        use_scale_shift_norm=use_scale_shift_norm,
+                    )
+                ]
+                ch = model_channels * mult
+                if ds in attention_resolutions:
+                    layers.append(
+                        AttentionBlock(
+                            ch,
+                            use_checkpoint=use_checkpoint,
+                            num_heads=num_heads_upsample,
+                        )
+                    )
+                if level and i == num_res_blocks:
+                    layers.append(Upsample(ch, conv_resample, dims=dims))
+                    ds //= 2
+                self.decoder.append(TimestepEmbedSequential(*layers))
+
         self.out = nn.Sequential(
             normalization(model_channels),
             SiLU(),
