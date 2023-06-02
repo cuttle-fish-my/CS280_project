@@ -670,22 +670,6 @@ class CrossConvolutionDecoder(nn.Module):
         self.num_heads_upsample = num_heads_upsample
 
         assert self.num_classes is None
-        # temp_unet = UNetModel(
-        #     in_channels,
-        #     model_channels,
-        #     out_channels,
-        #     num_res_blocks,
-        #     attention_resolutions,
-        #     dropout,
-        #     channel_mult,
-        #     conv_resample,
-        #     dims,
-        #     num_classes,
-        #     False,
-        #     num_heads,
-        #     num_heads_upsample,
-        #     use_scale_shift_norm,
-        # )
 
         # NOTE: this decoder requires time step embedding and cannot be splitted, rewrite
         # self.decoder = copy.deepcopy(temp_unet.output_blocks)
@@ -700,19 +684,11 @@ class CrossConvolutionDecoder(nn.Module):
                 input_block_chans.append(ch)
                 ds *= 2
         
+        ### Original decoder with ResBlocks replaced
         self.decoder = nn.ModuleList([])
         for level, mult in list(enumerate(channel_mult))[::-1]:
             for i in range(num_res_blocks + 1):
                 layers = [
-                    # ResBlock(
-                    #     ch + input_block_chans.pop(),
-                    #     time_embed_dim,
-                    #     dropout,
-                    #     out_channels=model_channels * mult,
-                    #     dims=dims,
-                    #     use_checkpoint=use_checkpoint,
-                    #     use_scale_shift_norm=use_scale_shift_norm,
-                    # )
                     DecoderResBlock(
                         ch + input_block_chans.pop(),
                         dropout,
@@ -736,6 +712,10 @@ class CrossConvolutionDecoder(nn.Module):
                     ds //= 2
                 self.decoder.append(TimestepEmbedSequential(*layers))
 
+        ### Replace blocks(layers) in decoder with cross convolution layer
+        self.decoder = nn.ModuleList([])
+
+        ### The output block is retained
         self.out = nn.Sequential(
             normalization(model_channels),
             SiLU(),
@@ -748,9 +728,11 @@ class CrossConvolutionDecoder(nn.Module):
             H and W is for the original spatial resolution
             H' and W' is for the encoded spatial resolution
             S is for number of images in the support set
-            target: [N, 1, C', H', W']
-            support: [N, S, C', H', W']
-            label: [N, S, C, H, W]
+            The batch dimension for the support and label is removed as a batch share the whole support set
+            
+            target: [N, C', H', W']
+            support: [S, C', H', W']
+            label: [S, C, H, W]
             hs_t: List of hidden states from the target encoder
             hs_s: List of hidden states from the encoder
         Output:
@@ -758,6 +740,7 @@ class CrossConvolutionDecoder(nn.Module):
         Like what is done in Unet decoder, first concatenation then pass to model
         '''
         pass
+        raise NotImplementedError
 
 
 class SuperResModel(UNetModel):
