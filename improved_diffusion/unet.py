@@ -48,6 +48,21 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
         return x
 
 
+class FiLM(nn.Module):
+    """Feature-wise linear modulation."""
+
+    def __init__(self, features: int, emb_ch=1024):
+        super().__init__()
+        self.features = features
+        self.dense = nn.Linear(emb_ch, 2 * features)
+
+    def forward(self, h, emb):
+        emb = self.dense(nn.functional.silu(emb.transpose(-1, -3))).transpose(-1, -3)
+        scale, shift = th.split(emb, self.features, dim=-3)
+
+        return h * (1. + scale) + shift
+
+
 class Upsample(nn.Module):
     """
     An upsampling layer with an optional convolution.
@@ -554,7 +569,7 @@ class CrossConvolutionDecoder(nn.Module):
             conv_resample,
             dims,
             num_classes,
-            use_checkpoint,
+            False,
             num_heads,
             num_heads_upsample,
             use_scale_shift_norm,
@@ -562,12 +577,30 @@ class CrossConvolutionDecoder(nn.Module):
         self.model_channels = model_channels
         self.out_channels = out_channels
 
+        # NOTE: this decoder requires time step embedding and cannot be splitted, rewrite
         self.decoder = copy.deepcopy(temp_unet.output_blocks)
         self.out = nn.Sequential(
             normalization(model_channels),
             SiLU(),
             zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
         )
+    
+    def forward(self, target, support, label, hs_t, hs_s):
+        '''
+        Input:
+            H and W is for the original spatial resolution
+            H' and W' is for the encoded spatial resolution
+            S is for number of images in the support set
+            target: [N, 1, C', H', W']
+            support: [N, S, C', H', W']
+            label: [N, S, C, H, W]
+            hs_t: List of hidden states from the target encoder
+            hs_s: List of hidden states from the encoder
+        Output:
+            out: [N, out_channel, H, W]
+        Like what is done in Unet decoder, first concatenation then pass to model
+        '''
+        pass
 
 
 class SuperResModel(UNetModel):
