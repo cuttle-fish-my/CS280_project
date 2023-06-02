@@ -1,6 +1,7 @@
 from abc import abstractmethod
 
 import math
+import copy
 
 import numpy as np
 import torch as th
@@ -521,6 +522,52 @@ class UNetModel(nn.Module):
             h = module(cat_in, emb)
             result["up"].append(h.type(x.dtype))
         return result
+
+
+class CrossConvolutionDecoder(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        model_channels,
+        out_channels,
+        num_res_blocks,
+        attention_resolutions,
+        dropout=0,
+        channel_mult=(1, 2, 4, 8),
+        conv_resample=True,
+        dims=2,
+        num_classes=None,
+        use_checkpoint=False,
+        num_heads=1,
+        num_heads_upsample=-1,
+        use_scale_shift_norm=False
+    ) -> None:
+        super().__init__()
+        temp_unet = UNetModel(
+            in_channels,
+            model_channels,
+            out_channels,
+            num_res_blocks,
+            attention_resolutions,
+            dropout,
+            channel_mult,
+            conv_resample,
+            dims,
+            num_classes,
+            use_checkpoint,
+            num_heads,
+            num_heads_upsample,
+            use_scale_shift_norm,
+        )
+        self.model_channels = model_channels
+        self.out_channels = out_channels
+
+        self.decoder = copy.deepcopy(temp_unet.output_blocks)
+        self.out = nn.Sequential(
+            normalization(model_channels),
+            SiLU(),
+            zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
+        )
 
 
 class SuperResModel(UNetModel):
