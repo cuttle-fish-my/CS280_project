@@ -972,8 +972,8 @@ class CrossConvolutionDecoder(nn.Module):
             target: [B, C', H', W']
             support: [B, S, C', H', W'] / [S, C', H', W']
             label: [B, S, C, H, W] / [S, C, H, W]
-            hs_t: List of hidden states from the target encoder
-            hs_s: List of hidden states from the encoder
+            hs_t: List of hidden states from the target passing encoder
+            hs_s: List of hidden states from the support passing encoder
         Output:
             out: [B, out_channel, H, W]
         Like what is done in Unet decoder, first concatenation then pass to model
@@ -1005,6 +1005,49 @@ class CrossConvolutionDecoder(nn.Module):
                 target, support = module(cat_target, cat_support)
         target = target.type(target.dtype)
         return self.out(target)
-        raise NotImplementedError
 
 
+class UNetandDecoder(nn.Module):
+    def __init__(self, model: UNetModel, decoder: CrossConvolutionDecoder) -> None:
+        super().__init__()
+        self.model = model
+        self.decoder = decoder
+
+    def forward(self, target: torch.Tensor, support: torch.Tensor, label: torch.Tensor, timestep):
+        '''
+        Args: 
+            target: [B, C, H, W]
+            support: [B, S, C, H, W] / [S, C, H, W]
+            label: [B, S, C, H, W] / [S, C, H, W]
+            timestep: 
+        Out:
+            out: [B, out_channel, H, W] -> predicted binary classification
+        '''
+        # TODO: is gradient in DDPM needed?
+        self.model.eval()
+        self.model.zero_grad()
+        assert target.shape[-3:] == support.shape[-3:] == label.shape[-3:]
+
+        result_target = self.model.get_feature_vectors(target, timestep)
+        target = result_target['middle']
+        hs_t = result_target['down']
+        
+        assert len(support.shape) == len(label.shape)
+        if len(support.shape) == 5:
+            assert support.shape[:2] == label.shape[:2]
+            B, S, *_ = support.shape
+            support = support.view(B * S, *support.shape[2:])
+            result_support = self.model.get_feature_vectors(support, timestep)
+            support = result_support['middle'].view(B, S, *result_support['middle'].shape[1:])
+            hs_s = []
+            for h_s in result_support['down']:
+                hs_s.append(h_s.view(B, S, *h_s.shape[1:]))
+        elif len(support.shape) == 4:
+            assert support.shape[0] == label.shape[0]
+            B, *_ = support.shape
+            result_support = self.model.get_feature_vectors(support, timestep)
+            support = result_support['middle']
+            hs_s = result_support['down']
+
+        out = self.decoder(target, support, label, hs_t, hs_s)
+        return out
