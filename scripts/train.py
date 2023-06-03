@@ -42,7 +42,7 @@ def main(args):
                             sampler=sampler,
                             num_workers=0)
     for epoch in range(args.epochs):
-        sampler.set_epoch(epoch)
+        # sampler.set_epoch(epoch)
         for batch in dataloader:
             noise = model(batch["img"], timesteps=torch.tensor([0] * args.batch_size))
             loss = torch.nn.MSELoss()(noise, torch.randn_like(noise))
