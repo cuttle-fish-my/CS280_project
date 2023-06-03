@@ -3,7 +3,6 @@ import torch
 import os
 import sys
 local_rank = int(os.environ.get("LOCAL_RANK", 0))
-import torch.distributed as dist
 
 sys.path.append(os.path.dirname(sys.path[0]))
 
@@ -24,6 +23,8 @@ def main(args):
 
     logger.log("creating model and diffusion...")
     model, diffusion, decoder = load_pretrained_ddpm(args)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    model = DDP(model, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
     dataset = Dataset(resolution=args.image_size,
                       root=args.data_dir,
                       filename_pickle=args.filename_pickle,
@@ -34,17 +35,19 @@ def main(args):
                       shuffle=True,
                       num_workers=args.num_workers,
                       drop_last=True)
-
+    sampler = DistributedSampler(dataset, shuffle=True)
     dataloader = DataLoader(dataset=dataset,
+                            sampler=sampler,
                             num_workers=0)
-
     for epoch in range(args.epochs):
+        sampler.set_epoch(epoch)
         for batch in dataloader:
-            img = batch['img']
-            label = batch['label']
-            support_img = batch['support_img']
-            support_label = batch['support_label']
-            print(batch["category"], batch["idx"])
+            noise = model(batch["img"])
+            loss = torch.nn.MSELoss()(noise, torch.randn_like(noise))
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            print(f"GPU {local_rank} get {batch['category'], batch['idx']}")
 
 
 def load_pretrained_ddpm(args):
