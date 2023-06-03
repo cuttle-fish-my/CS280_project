@@ -12,16 +12,16 @@ from improved_diffusion.image_datasets import COCOCategoryLoaderDataset as Datas
 from improved_diffusion.image_datasets import COCOCategoryLoaderDataLoader as DataLoader
 from improved_diffusion.script_util import (
     model_and_diffusion_defaults,
-    create_model_and_diffusion,
+    create_unet_and_segmentor,
 )
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP
-
+from improved_diffusion.unet import UNetandDecoder
 
 def main(args):
     logger.configure(args.save_dir)
 
     logger.log("creating model and diffusion...")
-    model, decoder = load_pretrained_ddpm(args)
+    model = load_pretrained_ddpm(args)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     model = DDP(model, device_ids=[local_rank], output_device=local_rank,
                 broadcast_buffers=False) if torch.cuda.is_available() else model
@@ -38,13 +38,18 @@ def main(args):
     dataloader = DataLoader(dataset=dataset,
                             num_workers=0)
     for epoch in range(args.epochs):
-        for batch in dataloader:
-            noise = model(batch["img"], timesteps=torch.tensor([0] * args.batch_size))
-            loss = torch.nn.MSELoss()(noise, torch.randn_like(noise))
+        for i, batch in enumerate(dataloader):
+            # pred = model(batch["img"], timesteps=torch.tensor([0] * args.batch_size))
+            img = batch["img"]
+            label = batch["label"]
+            support_img = batch["support_img"]
+            support_label = batch["support_label"]
+            pred = model(img, support_img, support_label, timestep=torch.tensor([0] * args.batch_size))
+            loss = torch.nn.BCELoss()(pred, label)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            print(f"GPU {local_rank} get {batch['category'], batch['idx']}")
+            print(f"epoch {epoch}, iter {i}, loss {loss.item()}")
 
 
 def load_pretrained_ddpm(args):
@@ -55,16 +60,13 @@ def load_pretrained_ddpm(args):
         "num_res_blocks": 3,
         "learn_sigma": True,
     })
-    model, decoder = create_model_and_diffusion(**DDPM_args)
-    if local_rank == 0 and os.path.exists(args.DDPM_dir):
-        model.load_state_dict(torch.load(args.DDPM_dir, map_location="cpu"))
-        print(f"Load pretrained DDPM from {args.DDPM_dir} successfully to GPU {local_rank}.")
-    model.to(dist_util.dev())
-    dist_util.sync_params(model.parameters())
-    # model.eval()
-    decoder.to(dist_util.dev())
-    decoder.train()
-    return model, decoder
+    unet, segmentor = create_unet_and_segmentor(**DDPM_args)
+    dist_util.load_checkpoint(args.DDPM_dir, unet)
+    dist_util.load_checkpoint(args.segmentor_dir, segmentor)
+    unet.requires_grad_(False)
+    unet.eval()
+    model = UNetandDecoder(unet, segmentor)
+    return model
 
 
 if __name__ == "__main__":
@@ -74,7 +76,7 @@ if __name__ == "__main__":
     parser.add_argument("--filename_pickle", type=str, required=True, help="Path to filename pickle")
     parser.add_argument("--save_dir", type=str, required=True, help="Path to save model")
 
-    parser.add_argument("--model_dir", type=str, required=False, help="Path to model directory")
+    parser.add_argument("--segmentor_dir", type=str, required=False, help="Path to segmentor directory")
     parser.add_argument("--DDPM_dir", type=str, required=True, help="Path to pretrained DDPM")
 
     parser.add_argument("--image_size", type=int, default=64)

@@ -9,6 +9,19 @@ import torch.distributed as dist
 GPUS_PER_NODE = 8
 
 
+def load_checkpoint(path, model):
+    """
+    Load a checkpoint from disk.
+    """
+    if path is None:
+        print(f"Warning: No checkpoint loaded for model {type(model)}")
+    if dist.get_rank() == 0 and path is not None:
+        checkpoint = th.load(path, map_location="cpu")
+        model.load_state_dict(checkpoint)
+    model.to(dev())
+    sync_params(model.parameters())
+
+
 def dev():
     """
     Get the device to use for torch.distributed.

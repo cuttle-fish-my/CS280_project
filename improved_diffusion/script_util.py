@@ -61,7 +61,7 @@ def model_and_diffusion_defaults():
     )
 
 
-def create_model_and_diffusion(
+def create_unet_and_segmentor(
         image_size,
         learn_sigma,
         num_channels,

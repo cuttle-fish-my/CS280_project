@@ -52,7 +52,7 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
 class FiLM(nn.Module):
     """Feature-wise linear modulation."""
 
-    def __init__(self, H:int, W:int, channel_num:int, C:int=1):
+    def __init__(self, H: int, W: int, channel_num: int, C: int = 1):
         super().__init__()
         emb_ch = H * W * C
         self.H = H
@@ -72,7 +72,7 @@ class FiLM(nn.Module):
         """
         B, S, *_ = label.shape
         label = self.flat(label)
-        label = label.reshape((B*S, label.shape[-1]))
+        label = label.reshape((B * S, label.shape[-1]))
         emb = self.dense(label)
         emb = emb.reshape((B, S, emb.shape[-1]))
         scale, shift = th.split(emb, self.channel_num, dim=-1)
@@ -82,11 +82,12 @@ class FiLM(nn.Module):
 
 class SENetBlock(nn.Module):
     '''channel-wise modulation'''
-    def __init__(self, ch:int, factor:int=16) -> None:
+
+    def __init__(self, ch: int, factor: int = 16) -> None:
         super().__init__()
         self.ch = ch
         self.factor = factor
-        self.avgpool = nn.AdaptiveAvgPool2d((1,1))
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc1 = nn.Linear(ch, ch // factor)
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(ch // factor, ch)
@@ -195,15 +196,15 @@ class ResBlock(TimestepBlock):
     """
 
     def __init__(
-        self,
-        channels,
-        emb_channels,
-        dropout,
-        out_channels=None,
-        use_conv=False,
-        use_scale_shift_norm=False,
-        dims=2,
-        use_checkpoint=False,
+            self,
+            channels,
+            emb_channels,
+            dropout,
+            out_channels=None,
+            use_conv=False,
+            use_scale_shift_norm=False,
+            dims=2,
+            use_checkpoint=False,
     ):
         super().__init__()
         self.channels = channels
@@ -287,14 +288,14 @@ class DecoderResBlock(nn.Module):
     """
 
     def __init__(
-        self,
-        channels,
-        dropout,
-        out_channels=None,
-        use_conv=False,
-        use_scale_shift_norm=False,
-        dims=2,
-        use_checkpoint=False,
+            self,
+            channels,
+            dropout,
+            out_channels=None,
+            use_conv=False,
+            use_scale_shift_norm=False,
+            dims=2,
+            use_checkpoint=False,
     ):
         super().__init__()
         self.channels = channels
@@ -336,11 +337,11 @@ class DecoderResBlock(nn.Module):
         else:
             h = self.out_layers(h)
         return self.skip_connection(x) + h
-    
+
 
 class DecoderBlock(nn.Module):
     ### NOTE: CrossConvolution, Convolution are needed
-    def __init__(self, in_channel, out_channel, cross_channel=None, kernel_size:int=3) -> None:
+    def __init__(self, in_channel, out_channel, cross_channel=None, kernel_size: int = 3) -> None:
         super().__init__()
         self.in_channel = in_channel
         self.out_channel = out_channel
@@ -357,13 +358,13 @@ class DecoderBlock(nn.Module):
             raise NotImplementedError
 
         self.crossconv = DecoderCrossConvBlock(
-            self.in_channel, 
+            self.in_channel,
             self.cross_channel,
             kernel_size=self.kernel_size,
         )
         ## TODO: The in channel should be corss_channel and the out channel should be out_channel?
         self.conv = DecoderConvBlock(
-            self.cross_channel, 
+            self.cross_channel,
             self.out_channel,
             kernel_size=self.kernel_size,
         )
@@ -385,7 +386,7 @@ class DecoderBlock(nn.Module):
 
 
 class DecoderCrossConvBlock(nn.Module):
-    def __init__(self, in_channel: Tuple[int, int], out_channel, kernel_size:int=3) -> None:
+    def __init__(self, in_channel: Tuple[int, int], out_channel, kernel_size: int = 3) -> None:
         super().__init__()
         self.in_channel = in_channel
         self.out_channel = out_channel
@@ -398,11 +399,11 @@ class DecoderCrossConvBlock(nn.Module):
             raise NotImplementedError
         self.concat_channel = self.in_channel[0] + self.in_channel[1]
         self.conv = nn.Conv2d(
-            self.concat_channel, 
+            self.concat_channel,
             self.out_channel,
             self.kernel_size,
             stride=1,
-            padding=self.kernel_size//2,
+            padding=self.kernel_size // 2,
         )
         self.nonlin = nn.LeakyReLU()
 
@@ -421,11 +422,12 @@ class DecoderCrossConvBlock(nn.Module):
         assert target.shape[2:] == support.shape[3:]
         assert Ct + Cs == self.concat_channel
         if Ct != Cs:
-            print("WARNING: Ct != Cs, the program will proceed but wrong answer will get and you should check the inputs!")
+            print(
+                "WARNING: Ct != Cs, the program will proceed but wrong answer will get and you should check the inputs!")
         target = target[:, None].repeat(1, S, 1, 1, 1)
         # support = support[None].repeat(B, 1, 1, 1, 1)
         concat = torch.cat([target, support], dim=2)
-        concat = concat.reshape(B*S, self.concat_channel, H, W)
+        concat = concat.reshape(B * S, self.concat_channel, H, W)
         out = self.conv(concat)
         out = self.nonlin(out)
         out = out.reshape(B, S, self.out_channel, H, W)
@@ -436,7 +438,7 @@ class DecoderCrossConvBlock(nn.Module):
 
 # need to be checked:
 class DecoderConvBlock(nn.Module):
-    def __init__(self, in_channel, out_channel, kernel_size:int=3) -> None:
+    def __init__(self, in_channel, out_channel, kernel_size: int = 3) -> None:
         super().__init__()
         self.in_channel = in_channel
         self.out_channel = out_channel
@@ -448,7 +450,7 @@ class DecoderConvBlock(nn.Module):
         #     assert len(self.in_channel) == 2
         # else:
         #     raise NotImplementedError
-        
+
         self.conv_target = nn.Conv2d(
             in_channels=self.in_channel,
             out_channels=self.out_channel,
@@ -621,21 +623,21 @@ class UNetModel(nn.Module):
     """
 
     def __init__(
-        self,
-        in_channels,
-        model_channels,
-        out_channels,
-        num_res_blocks,
-        attention_resolutions,
-        dropout=0,
-        channel_mult=(1, 2, 4, 8),
-        conv_resample=True,
-        dims=2,
-        num_classes=None,
-        use_checkpoint=False,
-        num_heads=1,
-        num_heads_upsample=-1,
-        use_scale_shift_norm=False,
+            self,
+            in_channels,
+            model_channels,
+            out_channels,
+            num_res_blocks,
+            attention_resolutions,
+            dropout=0,
+            channel_mult=(1, 2, 4, 8),
+            conv_resample=True,
+            dims=2,
+            num_classes=None,
+            use_checkpoint=False,
+            num_heads=1,
+            num_heads_upsample=-1,
+            use_scale_shift_norm=False,
     ):
         super().__init__()
 
@@ -791,7 +793,7 @@ class UNetModel(nn.Module):
         :return: an [N x C x ...] Tensor of outputs.
         """
         assert (y is not None) == (
-            self.num_classes is not None
+                self.num_classes is not None
         ), "must specify y if and only if the model is class-conditional"
 
         hs = []
@@ -847,26 +849,26 @@ class UNetModel(nn.Module):
 
 class CrossConvolutionDecoder(nn.Module):
     def __init__(
-        self,
-        in_channels,
-        model_channels,
-        out_channels,
-        num_res_blocks,
-        attention_resolutions,
-        dropout=0,
-        channel_mult=(1, 2, 4, 8),
-        conv_resample=True,
-        dims=2,
-        num_classes=None,
-        use_checkpoint=False,
-        num_heads=1,
-        num_heads_upsample=-1,
-        use_scale_shift_norm=False,
-        original_H=None,
-        original_W=None
+            self,
+            in_channels,
+            model_channels,
+            out_channels,
+            num_res_blocks,
+            attention_resolutions,
+            dropout=0,
+            channel_mult=(1, 2, 4, 8),
+            conv_resample=True,
+            dims=2,
+            num_classes=None,
+            use_checkpoint=False,
+            num_heads=1,
+            num_heads_upsample=-1,
+            use_scale_shift_norm=False,
+            original_H=None,
+            original_W=None
     ) -> None:
         super().__init__()
-        
+
         if num_heads_upsample == -1:
             num_heads_upsample = num_heads
 
@@ -890,7 +892,7 @@ class CrossConvolutionDecoder(nn.Module):
 
         # NOTE: this decoder requires time step embedding and cannot be splitted, rewrite
         # self.decoder = copy.deepcopy(temp_unet.output_blocks)
-        
+
         input_block_chans = [model_channels]
         ds = 1
         for level, mult in enumerate(channel_mult):
@@ -900,7 +902,7 @@ class CrossConvolutionDecoder(nn.Module):
             if level != len(channel_mult) - 1:
                 input_block_chans.append(ch)
                 ds *= 2
-        
+
         ### Original decoder with ResBlocks replaced
         # self.decoder = nn.ModuleList([])
         # for level, mult in list(enumerate(channel_mult))[::-1]:
@@ -937,8 +939,8 @@ class CrossConvolutionDecoder(nn.Module):
             for i in range(num_res_blocks + 1):
                 self.decoder.append(
                     FiLM(
-                        self.original_H, 
-                        self.original_W, 
+                        self.original_H,
+                        self.original_W,
                         ch
                     )
                 )
@@ -960,7 +962,7 @@ class CrossConvolutionDecoder(nn.Module):
             SiLU(),
             zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
         )
-    
+
     def forward(self, target: torch.Tensor, support: torch.Tensor, label: torch.Tensor, hs_t: list, hs_s: list):
         '''
         Input:
@@ -1023,15 +1025,12 @@ class UNetandDecoder(nn.Module):
         Out:
             out: [B, out_channel, H, W] -> predicted binary classification
         '''
-        # TODO: is gradient in DDPM needed?
-        self.model.eval()
-        self.model.zero_grad()
         assert target.shape[-3:] == support.shape[-3:] == label.shape[-3:]
 
         result_target = self.model.get_feature_vectors(target, timestep)
         target = result_target['middle']
         hs_t = result_target['down']
-        
+
         assert len(support.shape) == len(label.shape)
         if len(support.shape) == 5:
             assert support.shape[:2] == label.shape[:2]
