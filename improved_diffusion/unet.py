@@ -358,10 +358,11 @@ class DecoderBlock(nn.Module):
             raise NotImplementedError
 
         self.crossconv = DecoderCrossConvBlock(
-            self.in_channel[0], 
+            self.in_channel, 
             self.cross_channel,
             kernel_size=self.kernel_size,
         )
+        ## TODO: The in channel should be corss_channel and the out channel should be out_channel?
         self.conv = DecoderConvBlock(
             self.in_channel[0], 
             self.cross_channel,
@@ -392,8 +393,8 @@ class DecoderCrossConvBlock(nn.Module):
         self.kernel_size = kernel_size
         if isinstance(in_channel, int):
             self.in_channel = (in_channel, in_channel)
-        if isinstance(in_channel, (list, tuple)):
-            assert len(in_channel) == 2
+        if isinstance(self.in_channel, (list, tuple)):
+            assert len(self.in_channel) == 2
         else:
             raise NotImplementedError
         self.concat_channel = self.in_channel[0] + self.in_channel[1]
@@ -436,22 +437,22 @@ class DecoderCrossConvBlock(nn.Module):
 
 # need to be checked:
 class DecoderConvBlock(nn.Module):
-    # TODO: Convolutions part 
     def __init__(self, in_channel, out_channel, kernel_size:int=3) -> None:
         super().__init__()
         self.in_channel = in_channel
         self.out_channel = out_channel
         self.kernel_size = kernel_size
-        if isinstance(in_channel, int):
-            self.in_channel = (in_channel, in_channel)
-        if isinstance(in_channel, (list, tuple)):
-            assert len(in_channel) == 2
-        else:
-            raise NotImplementedError
+        # TODO: check whether the following code should be commented
+        # if isinstance(in_channel, int):
+        #     self.in_channel = (in_channel, in_channel)
+        # if isinstance(self.in_channel, (list, tuple)):
+        #     assert len(self.in_channel) == 2
+        # else:
+        #     raise NotImplementedError
         
         self.conv_target = nn.Conv2d(
-            in_channels=self.in_channels,
-            out_channels=self.out_channels,
+            in_channels=self.in_channel,
+            out_channels=self.out_channel,
             kernel_size=self.kernel_size,
             stride=1,
             padding=self.kernel_size // 2,
@@ -459,8 +460,8 @@ class DecoderConvBlock(nn.Module):
             bias=True,
         )
         self.conv_support = nn.Conv2d(
-            in_channels=self.in_channels,
-            out_channels=self.out_channels,
+            in_channels=self.in_channel,
+            out_channels=self.out_channel,
             kernel_size=self.kernel_size,
             stride=1,
             padding=self.kernel_size // 2,
