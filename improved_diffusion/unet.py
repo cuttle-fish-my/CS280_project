@@ -364,8 +364,8 @@ class DecoderBlock(nn.Module):
         )
         ## TODO: The in channel should be corss_channel and the out channel should be out_channel?
         self.conv = DecoderConvBlock(
-            self.in_channel[0], 
-            self.cross_channel,
+            self.cross_channel, 
+            self.out_channel,
             kernel_size=self.kernel_size,
         )
 
