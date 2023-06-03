@@ -27,7 +27,21 @@ python scripts/train.py --batch_size 2 --data_dir ./datasets/COCO --category_pic
 ```
 where ``--batch_size`` should be determined by your GPU
 ### Multi-GPU training
-NOT DONE YET..
+Before training, you need to ensure you have `torchrun` installed and `torchrun` is located in your virtual environment instead of system environment. 
+
+Check the location of `torchrun` with the following command:
+```bash
+which torchrun
+```
+if the output is like `/home/username/anaconda3/bin/torchrun`, then you need to reinstall `torch` in your virtual environment:
+```bash
+pip install --ignore-installed torch
+```
+After that, you can train the model with the following command:
+```bash
+torchrun  --nproc-per-node $NUM_GPUS python scripts/train.py --batch_size $BATCH_SIZE --data_dir ./datasets/COCO --category_pickle ./datasets/COCO/categories.pkl --filename_pickle ./datasets/COCO/train_filenames.pkl --save_dir ./result --DDPM_dir ./checkpoints/DDPM_pretrained.pt
+```
+where `$NUM_GPUS` is the number of GPUs you want to use and `$BATCH_SIZE` is the batch size for each GPU.
 
 *Note:* If you encountered the error like:
 ``
