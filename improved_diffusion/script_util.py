@@ -124,21 +124,21 @@ def create_model_and_diffusion(
         rescale_learned_sigmas=rescale_learned_sigmas,
         timestep_respacing=timestep_respacing,
     )
-    # decoder = create_decoder(
-    #     image_size,
-    #     num_channels,
-    #     num_res_blocks,
-    #     learn_sigma=learn_sigma,
-    #     class_cond=class_cond,
-    #     use_checkpoint=use_checkpoint,
-    #     attention_resolutions=attention_resolutions,
-    #     num_heads=num_heads,
-    #     num_heads_upsample=num_heads_upsample,
-    #     use_scale_shift_norm=use_scale_shift_norm,
-    #     dropout=dropout,
-    # )
-    # return model, diffusion, decoder
-    return model, diffusion
+    decoder = create_decoder(
+        image_size,
+        num_channels,
+        num_res_blocks,
+        learn_sigma=learn_sigma,
+        class_cond=class_cond,
+        use_checkpoint=use_checkpoint,
+        attention_resolutions=attention_resolutions,
+        num_heads=num_heads,
+        num_heads_upsample=num_heads_upsample,
+        use_scale_shift_norm=use_scale_shift_norm,
+        dropout=dropout,
+    )
+    return model, diffusion, decoder
+    # return model, diffusion
 
 def create_model(
     image_size,

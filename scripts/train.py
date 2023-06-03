@@ -23,8 +23,8 @@ def main(args):
     logger.configure(args.save_dir)
 
     logger.log("creating model and diffusion...")
-    # model, diffusion, decoder = load_pretrained_ddpm(args)
-    model, diffusion = load_pretrained_ddpm(args)
+    model, diffusion, decoder = load_pretrained_ddpm(args)
+    # model, diffusion = load_pretrained_ddpm(args)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     model = DDP(model, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
     dataset = Dataset(resolution=args.image_size,
@@ -62,15 +62,15 @@ def load_pretrained_ddpm(args):
         "diffusion_steps": 4000,
         "noise_schedule": "cosine"
     })
-    # model, diffusion, decoder = create_model_and_diffusion(**DDPM_args)
-    model, diffusion = create_model_and_diffusion(**DDPM_args)
+    model, diffusion, decoder = create_model_and_diffusion(**DDPM_args)
+    # model, diffusion = create_model_and_diffusion(**DDPM_args)
     model.load_state_dict(torch.load(args.DDPM_dir, map_location="cpu"))
     model.to(dist_util.dev())
     # model.eval()
-    # decoder.to(dist_util.dev())
-    # decoder.train()
-    # return model, diffusion, decoder
-    return model, diffusion
+    decoder.to(dist_util.dev())
+    decoder.train()
+    return model, diffusion, decoder
+    # return model, diffusion
 
 
 if __name__ == "__main__":
