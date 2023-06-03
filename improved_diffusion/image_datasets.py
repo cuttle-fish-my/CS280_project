@@ -4,12 +4,8 @@ import random
 
 import torch
 from PIL import Image
-import blobfile as bf
-from mpi4py import MPI
 import numpy as np
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
-from torch.utils.data.distributed import DistributedSampler
-import cv2
 
 
 class COCOCategoryLoaderDataset(Dataset):

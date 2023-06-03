@@ -1,7 +1,6 @@
 from abc import abstractmethod
 
 import math
-import copy
 from typing import Tuple
 
 import numpy as np

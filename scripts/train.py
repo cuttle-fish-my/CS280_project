@@ -18,7 +18,6 @@ from torch.nn.parallel.distributed import DistributedDataParallel as DDP
 
 
 def main(args):
-    # dist_util.setup_dist()
     logger.configure(args.save_dir)
 
     logger.log("creating model and diffusion...")
@@ -55,12 +54,11 @@ def load_pretrained_ddpm(args):
         "num_channels": 128,
         "num_res_blocks": 3,
         "learn_sigma": True,
-        # "diffusion_steps": 4000,
-        # "noise_schedule": "cosine"
     })
     model, decoder = create_model_and_diffusion(**DDPM_args)
     if local_rank == 0 and os.path.exists(args.DDPM_dir):
         model.load_state_dict(torch.load(args.DDPM_dir, map_location="cpu"))
+        print(f"Load pretrained DDPM from {args.DDPM_dir} successfully to GPU {local_rank}.")
     model.to(dist_util.dev())
     dist_util.sync_params(model.parameters())
     # model.eval()

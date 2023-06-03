@@ -3,7 +3,6 @@ Helpers to train with 16-bit precision.
 """
 
 import torch.nn as nn
-from torch._utils import _flatten_dense_tensors, _unflatten_dense_tensors
 
 
 def convert_module_to_f16(l):
