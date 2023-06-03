@@ -1073,5 +1073,5 @@ class UNetAndDecoder(nn.Module):
             print("only handle support set in shape [S, C, H, W], having:", support.shape)
             raise NotImplementedError
 
-        out = nn.Sigmoid(self.decoder(target, support, label, hs_t, hs_s))
+        out = nn.Sigmoid()(self.decoder(target, support, label, hs_t, hs_s))
         return out.squeeze(1)
