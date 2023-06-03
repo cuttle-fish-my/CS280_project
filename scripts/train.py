@@ -22,7 +22,7 @@ def main(args):
     logger.configure(args.save_dir)
 
     logger.log("creating model and diffusion...")
-    model, diffusion, decoder = load_pretrained_ddpm(args)
+    model, decoder = load_pretrained_ddpm(args)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     model = DDP(model, device_ids=[local_rank], output_device=local_rank,
                 broadcast_buffers=False) if torch.cuda.is_available() else model
@@ -55,10 +55,10 @@ def load_pretrained_ddpm(args):
         "num_channels": 128,
         "num_res_blocks": 3,
         "learn_sigma": True,
-        "diffusion_steps": 4000,
-        "noise_schedule": "cosine"
+        # "diffusion_steps": 4000,
+        # "noise_schedule": "cosine"
     })
-    model, diffusion, decoder = create_model_and_diffusion(**DDPM_args)
+    model, decoder = create_model_and_diffusion(**DDPM_args)
     if local_rank == 0 and os.path.exists(args.DDPM_dir):
         model.load_state_dict(torch.load(args.DDPM_dir, map_location="cpu"))
     dist_util.sync_params(model.parameters())
@@ -66,7 +66,7 @@ def load_pretrained_ddpm(args):
     # model.eval()
     decoder.to(dist_util.dev())
     decoder.train()
-    return model, diffusion, decoder
+    return model, decoder
 
 
 if __name__ == "__main__":
@@ -90,9 +90,9 @@ if __name__ == "__main__":
     opts = parser.parse_args()
     if torch.cuda.is_available():
         torch.cuda.set_device(local_rank)
-        os.environ.setdefault("MASTER_PORT", "12355")
-        os.environ.setdefault("MASTER_ADDR", "localhost")
-        os.environ.setdefault("WORLD_SIZE", "1")
-        os.environ.setdefault("RANK", str(local_rank))
-        dist.init_process_group(backend="nccl", init_method="env://")
+    os.environ.setdefault("MASTER_PORT", "12355")
+    os.environ.setdefault("MASTER_ADDR", "localhost")
+    os.environ.setdefault("WORLD_SIZE", "1")
+    os.environ.setdefault("RANK", str(local_rank))
+    dist.init_process_group(backend="nccl" if torch.cuda.is_available() else "gloo", init_method="env://")
     main(opts)
