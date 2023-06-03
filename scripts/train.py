@@ -15,7 +15,7 @@ from improved_diffusion.script_util import (
     create_unet_and_segmentor,
 )
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP
-from improved_diffusion.unet import UNetandDecoder
+from improved_diffusion.unet import UNetAndDecoder
 
 def main(args):
     logger.configure(args.save_dir)
@@ -65,7 +65,7 @@ def load_pretrained_ddpm(args):
     dist_util.load_checkpoint(args.segmentor_dir, segmentor)
     unet.requires_grad_(False)
     unet.eval()
-    model = UNetandDecoder(unet, segmentor)
+    model = UNetAndDecoder(unet, segmentor)
     return model
 
 

@@ -1,7 +1,7 @@
 from abc import abstractmethod
 
 import math
-from typing import Tuple
+from typing import Tuple, List
 
 import numpy as np
 import torch
@@ -81,7 +81,7 @@ class FiLM(nn.Module):
 
 
 class SENetBlock(nn.Module):
-    '''channel-wise modulation'''
+    """channel-wise modulation"""
 
     def __init__(self, ch: int, factor: int = 16) -> None:
         super().__init__()
@@ -93,7 +93,7 @@ class SENetBlock(nn.Module):
         self.fc2 = nn.Linear(ch // factor, ch)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, target: torch.Tensor, hs_t: list) -> torch.Tensor:
+    def forward(self, target: torch.Tensor, hs_t: list) -> Tuple[torch.Tensor, List]:
         """
         Args:
             target: [B, C1, H, W]
@@ -103,8 +103,7 @@ class SENetBlock(nn.Module):
             new_hs_t: list of [B, Cn, H, W]
         """
         list_tensor = []
-        list_channels = []
-        list_channels.append(target.shape[1])
+        list_channels = [target.shape[1]]
         # target = self.avgpool(target)
         list_tensor.append(self.avgpool(target).squeeze())
         for h in hs_t:
@@ -340,7 +339,7 @@ class DecoderResBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    ### NOTE: CrossConvolution, Convolution are needed
+    # NOTE: CrossConvolution, Convolution are needed
     def __init__(self, in_channel, out_channel, cross_channel=None, kernel_size: int = 3) -> None:
         super().__init__()
         self.in_channel = in_channel
@@ -362,14 +361,14 @@ class DecoderBlock(nn.Module):
             self.cross_channel,
             kernel_size=self.kernel_size,
         )
-        ## TODO: The in channel should be corss_channel and the out channel should be out_channel?
+        # TODO: The in channel should be corss_channel and the out channel should be out_channel?
         self.conv = DecoderConvBlock(
             self.cross_channel,
             self.out_channel,
             kernel_size=self.kernel_size,
         )
 
-    def forward(self, target: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
+    def forward(self, target: torch.Tensor, support: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             target (torch.Tensor): [B, Ct, H', W']
@@ -407,7 +406,7 @@ class DecoderCrossConvBlock(nn.Module):
         )
         self.nonlin = nn.LeakyReLU()
 
-    def forward(self, target: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
+    def forward(self, target: torch.Tensor, support: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             target: [B, Ct, H, W]
@@ -423,7 +422,8 @@ class DecoderCrossConvBlock(nn.Module):
         assert Ct + Cs == self.concat_channel
         if Ct != Cs:
             print(
-                "WARNING: Ct != Cs, the program will proceed but wrong answer will get and you should check the inputs!")
+                "WARNING: Ct != Cs, "
+                "the program will proceed but wrong answer will get and you should check the inputs!")
         target = target[:, None].repeat(1, S, 1, 1, 1)
         # support = support[None].repeat(B, 1, 1, 1, 1)
         concat = torch.cat([target, support], dim=2)
@@ -903,7 +903,7 @@ class CrossConvolutionDecoder(nn.Module):
                 input_block_chans.append(ch)
                 ds *= 2
 
-        ### Original decoder with ResBlocks replaced
+        # Original decoder with ResBlocks replaced
         # self.decoder = nn.ModuleList([])
         # for level, mult in list(enumerate(channel_mult))[::-1]:
         #     for i in range(num_res_blocks + 1):
@@ -931,7 +931,7 @@ class CrossConvolutionDecoder(nn.Module):
         #             ds //= 2
         #         self.decoder.append(TimestepEmbedSequential(*layers))
 
-        ### Replace blocks(layers) in decoder with cross convolution layer
+        # Replace blocks(layers) in decoder with cross convolution layer
         channel_sum = ch + sum(input_block_chans)
         self.SENetBlock = SENetBlock(channel_sum)
         self.decoder = nn.ModuleList([])
@@ -956,7 +956,7 @@ class CrossConvolutionDecoder(nn.Module):
                     ds //= 2
                 self.decoder.append(TimestepEmbedSequential(*layers))
 
-        ### The output block is retained
+        # The output block is retained
         self.out = nn.Sequential(
             normalization(model_channels),
             SiLU(),
@@ -964,13 +964,13 @@ class CrossConvolutionDecoder(nn.Module):
         )
 
     def forward(self, target: torch.Tensor, support: torch.Tensor, label: torch.Tensor, hs_t: list, hs_s: list):
-        '''
+        """
         Input:
             H and W is for the original spatial resolution
             H' and W' is for the encoded spatial resolution
             S is for number of images in the support set
             The batch dimension for the support and label is removed as a batch share the whole support set
-            
+
             target: [B, C', H', W']
             support: [B, S, C', H', W'] / [S, C', H', W']
             label: [B, S, C, H, W] / [S, C, H, W]
@@ -979,7 +979,7 @@ class CrossConvolutionDecoder(nn.Module):
         Output:
             out: [B, out_channel, H, W]
         Like what is done in Unet decoder, first concatenation then pass to model
-        '''
+        """
         B, *_ = target.shape
         if len(label.shape) != len(support.shape):
             print("the label shape length and support length is not consistent, please check")
@@ -1009,22 +1009,22 @@ class CrossConvolutionDecoder(nn.Module):
         return self.out(target)
 
 
-class UNetandDecoder(nn.Module):
+class UNetAndDecoder(nn.Module):
     def __init__(self, model: UNetModel, decoder: CrossConvolutionDecoder) -> None:
         super().__init__()
         self.model = model
         self.decoder = decoder
 
     def forward(self, target: torch.Tensor, support: torch.Tensor, label: torch.Tensor, timestep):
-        '''
-        Args: 
+        """
+        Args:
             target: [B, C, H, W]
             support: [B, S, C, H, W] / [S, C, H, W]
             label: [B, S, C, H, W] / [S, C, H, W]
-            timestep: 
+            timestep:
         Out:
             out: [B, out_channel, H, W] -> predicted binary classification
-        '''
+        """
         assert target.shape[-3:] == support.shape[-3:] == label.shape[-3:]
 
         result_target = self.model.get_feature_vectors(target, timestep)
