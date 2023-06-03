@@ -122,7 +122,7 @@ class COCODataset(Dataset):
         label = label.resize((self.resolution, self.resolution), resample=Image.NEAREST)
         img = np.array(img).astype(np.float32) / 127.5 - 1
         label = np.array(label).astype(np.uint8)
-        label = (label == self.category_id).astype(np.int64)
+        label = (label == self.category_id).astype(np.float32)
 
         return img.transpose([2, 0, 1]), label
 
@@ -139,7 +139,7 @@ class COCODataset(Dataset):
             support_label.append(label)
         support_img = np.stack(support_img, axis=0)
         support_label = np.stack(support_label, axis=0)
-        return support_img, support_label
+        return support_img, support_label.astype(np.float32)
 
 
 class COCODataLoader(DataLoader):
@@ -157,7 +157,7 @@ class COCODataLoader(DataLoader):
         self.dataset: COCODataset
         support_img, support_label = self.dataset.support_set(selected_idx)
         support_img = torch.from_numpy(support_img).float()
-        support_label = torch.from_numpy(support_label).long()
+        support_label = torch.from_numpy(support_label).float()
         return support_img, support_label
 
 

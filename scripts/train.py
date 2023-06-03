@@ -44,7 +44,8 @@ def main(args):
             label = batch["label"]
             support_img = batch["support_img"]
             support_label = batch["support_label"]
-            pred = model(img, support_img, support_label.to(torch.float32))
+            pred = model(img, support_img, support_label)
+            pred = torch.nn.Sigmoid()(pred)
             loss = torch.nn.BCELoss()(pred, label)
             optimizer.zero_grad()
             loss.backward()
