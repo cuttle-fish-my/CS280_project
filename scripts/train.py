@@ -24,7 +24,7 @@ def main(args):
     model = load_pretrained_ddpm(args)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     model = DDP(model, device_ids=[local_rank], output_device=local_rank,
-                broadcast_buffers=False) if torch.cuda.is_available() else model
+                broadcast_buffers=False, find_unused_parameters=True) if torch.cuda.is_available() else model
     dataset = Dataset(resolution=args.image_size,
                       root=args.data_dir,
                       filename_pickle=args.filename_pickle,
