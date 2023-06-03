@@ -19,8 +19,8 @@ from improved_diffusion.unet import UNetAndDecoder
 
 def main(args):
     logger.configure(args.save_dir)
-
-    logger.log("creating model and diffusion...")
+    if local_rank == 0:
+        logger.log("creating model and diffusion...")
     model = load_pretrained_ddpm(args)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     model = DDP(model, device_ids=[local_rank], output_device=local_rank,

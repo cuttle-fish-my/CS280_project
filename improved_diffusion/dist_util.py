@@ -4,7 +4,7 @@ Helpers for distributed training.
 import torch as th
 import torch.distributed as dist
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP
-
+from improved_diffusion import logger
 # Change this to reflect your cluster layout.
 # The GPU for a given rank is (rank % GPUS_PER_NODE).
 GPUS_PER_NODE = 8
@@ -15,7 +15,8 @@ def load_checkpoint(path, model):
     Load a checkpoint from disk.
     """
     if path is None:
-        print(f"Warning: No checkpoint loaded for model {type(model)}")
+        if dist.get_rank() == 0:
+            logger.log(f"Warning: No checkpoint loaded for model {type(model)}")
     if dist.get_rank() == 0 and path is not None:
         checkpoint = th.load(path, map_location="cpu")
         model.load_state_dict(checkpoint)
