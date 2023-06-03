@@ -1013,7 +1013,7 @@ class UNetAndDecoder(nn.Module):
         self.model = model
         self.decoder = decoder
 
-    def forward(self, target: torch.Tensor, support: torch.Tensor, label: torch.Tensor, timestep):
+    def forward(self, target: torch.Tensor, support: torch.Tensor, label: torch.Tensor):
         """
         Args:
             target: [B, C, H, W]
@@ -1026,6 +1026,7 @@ class UNetAndDecoder(nn.Module):
         assert target.shape[-3:] == support.shape[-3:]
         assert support.shape[-2:] == label.shape[-2:]
 
+        timestep = torch.tensor([0] * target.shape[0], device=target.device)
         result_target = self.model.get_feature_vectors(target, timestep)
         target = result_target['middle']
         hs_t = result_target['down']
@@ -1034,6 +1035,7 @@ class UNetAndDecoder(nn.Module):
         assert len(support.shape) == len(label.shape)
         assert support.shape[0] == label.shape[0]
         if len(support.shape) == 4:
+            timestep = torch.tensor([0] * support.shape[0], device=support.device)
             result_support = self.model.get_feature_vectors(support, timestep)
             support = result_support['middle']
             hs_s = result_support['down']
