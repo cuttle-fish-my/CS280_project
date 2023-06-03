@@ -57,7 +57,7 @@ def main(args):
                 logger.logkv_mean("loss", loss.item())
                 logger.dumpkvs()
         iteration += 1
-        if iteration > args.num_iterations:
+        if iteration > args.num_iteration:
             break
 
 
