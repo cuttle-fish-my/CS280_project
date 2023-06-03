@@ -39,7 +39,7 @@ and rename the downloaded `*.pt` file to `DDPM_pretrained.pt` and put it to path
     ```
     After that, you can train the model with the following command:
     ```bash
-    torchrun  --nproc-per-node $NUM_GPUS python scripts/train.py --batch_size $BATCH_SIZE --data_dir ./datasets/COCO --category_pickle ./datasets/COCO/categories.pkl --filename_pickle ./datasets/COCO/train_filenames.pkl --save_dir ./result --DDPM_dir ./checkpoints/DDPM_pretrained.pt
+    torchrun --nproc-per-node $NUM_GPUS scripts/train.py --batch_size $BATCH_SIZE --data_dir ./datasets/COCO --category_pickle ./datasets/COCO/categories.pkl --filename_pickle ./datasets/COCO/train_filenames.pkl --save_dir ./result --DDPM_dir ./checkpoints/DDPM_pretrained.pt
     ```
     where `$NUM_GPUS` is the number of GPUs you want to use and `$BATCH_SIZE` is the batch size for each GPU.
 
