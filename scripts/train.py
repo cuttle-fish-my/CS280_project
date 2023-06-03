@@ -3,8 +3,9 @@ import torch
 import os
 import sys
 local_rank = int(os.environ.get("LOCAL_RANK", 0))
-sys.path.append(os.path.dirname(sys.path[0]))
 import torch.distributed as dist
+
+sys.path.append(os.path.dirname(sys.path[0]))
 
 from improved_diffusion import dist_util, logger
 from improved_diffusion.image_datasets import COCOCategoryLoaderDataset as Dataset
@@ -23,7 +24,6 @@ def main(args):
 
     logger.log("creating model and diffusion...")
     model, diffusion, decoder = load_pretrained_ddpm(args)
-    model = DDP(model, device_ids=[local_rank], output_device=local_rank)
     dataset = Dataset(resolution=args.image_size,
                       root=args.data_dir,
                       filename_pickle=args.filename_pickle,
@@ -34,18 +34,16 @@ def main(args):
                       shuffle=True,
                       num_workers=args.num_workers,
                       drop_last=True)
-    sampler = DistributedSampler(dataset, shuffle=True)
+
     dataloader = DataLoader(dataset=dataset,
                             num_workers=0)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+
     for epoch in range(args.epochs):
-        sampler.set_epoch(epoch)
         for batch in dataloader:
-            noise = model(batch["img"])
-            loss = torch.nn.MSELoss()(noise, torch.randn_like(batch["img"].shape))
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            img = batch['img']
+            label = batch['label']
+            support_img = batch['support_img']
+            support_label = batch['support_label']
             print(batch["category"], batch["idx"])
 
 
@@ -60,11 +58,7 @@ def load_pretrained_ddpm(args):
         "noise_schedule": "cosine"
     })
     model, diffusion, decoder = create_model_and_diffusion(**DDPM_args)
-    if local_rank == 0 and args.DDPM_dir:
-        model.load_state_dict(
-            torch.load(args.DDPM_dir, map_location=dist_util.dev())
-        )
-        dist_util.sync_params(model.parameters())
+    model.load_state_dict(torch.load(args.DDPM_dir, map_location="cpu"))
     model.to(dist_util.dev())
     # model.eval()
     decoder.to(dist_util.dev())
@@ -91,8 +85,4 @@ if __name__ == "__main__":
     parser.add_argument("--num_support", type=int, default=5, help="cardinality of support set")
 
     opts = parser.parse_args()
-    if torch.cuda.is_available():
-        torch.cuda.set_device(local_rank)
-        dist.init_process_group(backend="nccl", init_method="env://")
-
     main(opts)

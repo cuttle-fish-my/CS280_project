@@ -8,6 +8,7 @@ import blobfile as bf
 from mpi4py import MPI
 import numpy as np
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
+from torch.utils.data.distributed import DistributedSampler
 import cv2
 
 
@@ -169,7 +170,7 @@ class COCOCategoryLoaderDataLoader(DataLoader):
         Forcing batch_size to be 1 and shuffle to be False since its mutually exclusive with sampler.
         """
         weight = torch.from_numpy(kwargs['dataset'].weights)
-        kwargs['sampler'] = WeightedRandomSampler(weight, 1, False)
+        # kwargs['sampler'] = WeightedRandomSampler(weight, 1, False)
         kwargs['batch_size'] = 1
         kwargs['shuffle'] = False
         super().__init__(**kwargs)
