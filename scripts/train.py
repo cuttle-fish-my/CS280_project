@@ -66,7 +66,7 @@ def load_pretrained_ddpm(args):
         )
         dist_util.sync_params(model.parameters())
     model.to(dist_util.dev())
-    model.eval()
+    # model.eval()
     decoder.to(dist_util.dev())
     decoder.train()
     return model, diffusion, decoder
