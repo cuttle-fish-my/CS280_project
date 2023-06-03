@@ -47,6 +47,18 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
             else:
                 x = layer(x)
         return x
+    
+
+class DoubleInDoubleOutSequential(nn.Sequential):
+    """
+    A sequential module that passes timestep embeddings to the children that
+    support it as an extra input.
+    """
+
+    def forward(self, x1, x2):
+        for layer in self:
+            x1, x2 = layer(x1, x2)
+        return x1, x2
 
 
 class FiLM(nn.Module):
@@ -105,11 +117,11 @@ class SENetBlock(nn.Module):
         list_tensor = []
         list_channels = [target.shape[1]]
         # target = self.avgpool(target)
-        list_tensor.append(self.avgpool(target).squeeze())
+        list_tensor.append(self.avgpool(target).squeeze(3).squeeze(2))
         for h in hs_t:
             list_channels.append(h.shape[1])
             # h = self.avgpool(h)
-            list_tensor.append(self.avgpool(h).squeeze())
+            list_tensor.append(self.avgpool(h).squeeze(3).squeeze(2))
         stacked_tensor = torch.cat(list_tensor, dim=1)
         stacked_tensor = self.fc1(stacked_tensor)
         stacked_tensor = self.relu(stacked_tensor)
@@ -473,10 +485,21 @@ class DecoderConvBlock(nn.Module):
         self.nonlin_support = nn.LeakyReLU()
 
     def forward(self, target: torch.Tensor, support: torch.Tensor):
+        """
+        Args:
+            target: [B, Ci, H', W']
+            support: [B, S, Ci, H', W']
+        Return:
+            target: [B, Co, H', W']
+            support: [B, S, Co, H', W']
+        """
+        B, S, *_ = support.shape
         target = self.conv_target(target)
         target = self.nonlin_target(target)
+        support = support.reshape(B * S, *support.shape[2:])
         support = self.conv_support(support)
         support = self.nonlin_support(support)
+        support = support.reshape(B, S, *support.shape[1:])
         return target, support
 
 
@@ -497,7 +520,7 @@ class Upsample2in2out(nn.Module):
             self.conv_t = conv_nd(2, channels, channels, 3, padding=1)
             self.conv_s = conv_nd(2, channels, channels, 3, padding=1)
 
-    def forward(self, target, support):
+    def forward(self, target: torch.Tensor, support: torch.Tensor):
         """
         Args:
             target: [B, C, H, W]
@@ -508,6 +531,8 @@ class Upsample2in2out(nn.Module):
         """
         assert target.shape[1] == self.channels
         assert support.shape[2] == self.channels
+        B, S, *_ = support.shape
+        support = support.reshape(B * S, *support.shape[2:])
         # if self.dims == 3:
         #     x = F.interpolate(
         #         x, (x.shape[2], x.shape[3] * 2, x.shape[4] * 2), mode="nearest"
@@ -518,6 +543,7 @@ class Upsample2in2out(nn.Module):
         if self.use_conv:
             target = self.conv_t(target)
             support = self.conv_s(support)
+        support = support.reshape(B, S, *support.shape[1:])
         return target, support
 
 
@@ -954,7 +980,7 @@ class CrossConvolutionDecoder(nn.Module):
                 if level and i == num_res_blocks:
                     layers.append(Upsample2in2out(ch, conv_resample))
                     ds //= 2
-                self.decoder.append(TimestepEmbedSequential(*layers))
+                self.decoder.append(DoubleInDoubleOutSequential(*layers))
 
         # The output block is retained
         self.out = nn.Sequential(
@@ -1004,7 +1030,7 @@ class CrossConvolutionDecoder(nn.Module):
                 # hidden_t = repeat(hidden_t, "B C H W -> B S C H W", B=B, S=S)
                 hidden_s = repeat(hidden_s, "S C H W -> B S C H W", B=B, S=S)
                 cat_target = torch.cat([target, hidden_t], dim=1)
-                cat_support = torch.cat([support, hidden_s], dim=1)
+                cat_support = torch.cat([support, hidden_s], dim=2)
 
                 target, support = module(cat_target, cat_support)
         target = target.type(target.dtype)
@@ -1048,4 +1074,4 @@ class UNetAndDecoder(nn.Module):
             raise NotImplementedError
 
         out = self.decoder(target, support, label, hs_t, hs_s)
-        return out
+        return out.squeeze(1)
