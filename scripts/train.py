@@ -38,25 +38,27 @@ def main(args):
     dataloader = DataLoader(dataset=dataset,
                             num_workers=0)
     iteration = 0
-    for epoch in range(args.epochs):
-        for i, batch in enumerate(dataloader):
-            # pred = model(batch["img"], timesteps=torch.tensor([0] * args.batch_size))
-            img = batch["img"]
-            label = batch["label"]
-            support_img = batch["support_img"]
-            support_label = batch["support_label"]
-            pred = model(img, support_img, support_label)
-            loss = torch.nn.BCELoss()(pred, label.to(dist_util.dev()))
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            if iteration % args.save_interval == 0:
-                dist_util.save_checkpoint(model, os.path.join(args.save_dir, f"segmentor_{iteration}.pt"))
-            if iteration % args.log_interval == 0:
+    for i, batch in enumerate(dataloader):
+        # pred = model(batch["img"], timesteps=torch.tensor([0] * args.batch_size))
+        img = batch["img"]
+        label = batch["label"]
+        support_img = batch["support_img"]
+        support_label = batch["support_label"]
+        pred = model(img, support_img, support_label)
+        loss = torch.nn.BCELoss()(pred, label.to(dist_util.dev()))
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        if iteration % args.save_interval == 0:
+            dist_util.save_checkpoint(model, os.path.join(args.save_dir, f"segmentor_{iteration}.pt"))
+        if iteration % args.log_interval == 0:
+            if local_rank == 0:
                 logger.logkv("iteration", iteration)
                 logger.logkv_mean("loss", loss.item())
                 logger.dumpkvs()
-            iteration += 1
+        iteration += 1
+        if iteration > args.num_iterations:
+            break
 
 
 def load_pretrained_ddpm(args):
@@ -89,7 +91,7 @@ if __name__ == "__main__":
     parser.add_argument("--image_size", type=int, default=64)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--num_workers", type=int, default=0)
-    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--iteration", type=int, default=5e6)
     parser.add_argument("--lr", type=float, default=1e-4)
 
     parser.add_argument("--save_interval", type=int, default=1000)
