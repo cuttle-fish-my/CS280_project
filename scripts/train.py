@@ -61,8 +61,8 @@ def load_pretrained_ddpm(args):
     model, decoder = create_model_and_diffusion(**DDPM_args)
     if local_rank == 0 and os.path.exists(args.DDPM_dir):
         model.load_state_dict(torch.load(args.DDPM_dir, map_location="cpu"))
-    dist_util.sync_params(model.parameters())
     model.to(dist_util.dev())
+    dist_util.sync_params(model.parameters())
     # model.eval()
     decoder.to(dist_util.dev())
     decoder.train()
