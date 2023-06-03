@@ -18,8 +18,8 @@ from torch.nn.parallel.distributed import DistributedDataParallel as DDP
 from improved_diffusion.unet import UNetAndDecoder
 
 def main(args):
-    logger.configure(args.save_dir)
     if local_rank == 0:
+        logger.configure(args.save_dir)
         logger.log("creating model and diffusion...")
     model = load_pretrained_ddpm(args)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
@@ -57,7 +57,7 @@ def main(args):
                 logger.logkv_mean("loss", loss.item())
                 logger.dumpkvs()
         iteration += 1
-        if iteration > args.num_iteration:
+        if iteration > args.iteration:
             break
 
 
