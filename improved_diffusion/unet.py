@@ -8,7 +8,7 @@ import torch
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
-
+from einops import rearrange, repeat, reduce
 from .fp16_util import convert_module_to_f16, convert_module_to_f32
 from .nn import (
     SiLU,
@@ -77,7 +77,7 @@ class FiLM(nn.Module):
         emb = emb.reshape((B, S, emb.shape[-1]))
         scale, shift = th.split(emb, self.channel_num, dim=-1)
 
-        return support * (1. + scale) + shift
+        return support * (1. + scale[..., None, None]) + shift[..., None, None]
 
 
 class SENetBlock(nn.Module):
@@ -110,7 +110,7 @@ class SENetBlock(nn.Module):
             list_channels.append(h.shape[1])
             # h = self.avgpool(h)
             list_tensor.append(self.avgpool(h).squeeze())
-        stacked_tensor = torch.stack(list_tensor, dim=1)
+        stacked_tensor = torch.cat(list_tensor, dim=1)
         stacked_tensor = self.fc1(stacked_tensor)
         stacked_tensor = self.relu(stacked_tensor)
         stacked_tensor = self.fc2(stacked_tensor)
@@ -998,7 +998,11 @@ class CrossConvolutionDecoder(nn.Module):
                 support = module(support, label)
             else:
                 hidden_t = hs_t.pop()
+                B = hidden_t.shape[0]
                 hidden_s = hs_s.pop()
+                S = hidden_s.shape[0]
+                # hidden_t = repeat(hidden_t, "B C H W -> B S C H W", B=B, S=S)
+                hidden_s = repeat(hidden_s, "S C H W -> B S C H W", B=B, S=S)
                 cat_target = torch.cat([target, hidden_t], dim=1)
                 cat_support = torch.cat([support, hidden_s], dim=1)
 

@@ -44,7 +44,7 @@ def main(args):
             label = batch["label"]
             support_img = batch["support_img"]
             support_label = batch["support_label"]
-            pred = model(img, support_img, support_label, timestep=torch.tensor([0] * args.batch_size))
+            pred = model(img, support_img, support_label.to(torch.float32))
             loss = torch.nn.BCELoss()(pred, label)
             optimizer.zero_grad()
             loss.backward()
