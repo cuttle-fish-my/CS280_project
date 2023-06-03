@@ -15,16 +15,14 @@ from improved_diffusion.script_util import (
     create_model_and_diffusion,
 )
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP
-from torch.utils.data.distributed import DistributedSampler
 
 
 def main(args):
-    dist_util.setup_dist()
+    # dist_util.setup_dist()
     logger.configure(args.save_dir)
 
     logger.log("creating model and diffusion...")
     model, diffusion, decoder = load_pretrained_ddpm(args)
-    # model, diffusion = load_pretrained_ddpm(args)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     model = DDP(model, device_ids=[local_rank], output_device=local_rank,
                 broadcast_buffers=False) if torch.cuda.is_available() else model
@@ -38,12 +36,9 @@ def main(args):
                       shuffle=True,
                       num_workers=args.num_workers,
                       drop_last=True)
-    # sampler = DistributedSampler(dataset, shuffle=True)
     dataloader = DataLoader(dataset=dataset,
-                            # sampler=sampler,
                             num_workers=0)
     for epoch in range(args.epochs):
-        # sampler.set_epoch(epoch)
         for batch in dataloader:
             noise = model(batch["img"], timesteps=torch.tensor([0] * args.batch_size))
             loss = torch.nn.MSELoss()(noise, torch.randn_like(noise))
@@ -64,14 +59,14 @@ def load_pretrained_ddpm(args):
         "noise_schedule": "cosine"
     })
     model, diffusion, decoder = create_model_and_diffusion(**DDPM_args)
-    # model, diffusion = create_model_and_diffusion(**DDPM_args)
-    model.load_state_dict(torch.load(args.DDPM_dir, map_location="cpu"))
+    if local_rank == 0 and os.path.exists(args.DDPM_dir):
+        model.load_state_dict(torch.load(args.DDPM_dir, map_location="cpu"))
+    dist_util.sync_params(model.parameters())
     model.to(dist_util.dev())
     # model.eval()
     decoder.to(dist_util.dev())
     decoder.train()
     return model, diffusion, decoder
-    # return model, diffusion
 
 
 if __name__ == "__main__":
