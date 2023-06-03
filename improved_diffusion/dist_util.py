@@ -3,6 +3,7 @@ Helpers for distributed training.
 """
 import torch as th
 import torch.distributed as dist
+from torch.nn.parallel.distributed import DistributedDataParallel as DDP
 
 # Change this to reflect your cluster layout.
 # The GPU for a given rank is (rank % GPUS_PER_NODE).
@@ -40,4 +41,11 @@ def sync_params(params):
             dist.broadcast(p, 0)
 
 
-
+def save_checkpoint(model, path):
+    """
+    Save a checkpoint to disk.
+    """
+    if dist.get_rank() == 0:
+        if isinstance(model, DDP):
+            model = model.module
+        th.save(model.decoder.state_dict(), path)

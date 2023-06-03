@@ -37,6 +37,7 @@ def main(args):
                       drop_last=True)
     dataloader = DataLoader(dataset=dataset,
                             num_workers=0)
+    iteration = 0
     for epoch in range(args.epochs):
         for i, batch in enumerate(dataloader):
             # pred = model(batch["img"], timesteps=torch.tensor([0] * args.batch_size))
@@ -46,11 +47,15 @@ def main(args):
             support_label = batch["support_label"]
             pred = model(img, support_img, support_label)
             pred = torch.nn.Sigmoid()(pred)
-            loss = torch.nn.BCELoss()(pred, label)
+            loss = torch.nn.BCELoss()(pred, label.to(dist_util.dev()))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            print(f"epoch {epoch}, iter {i}, loss {loss.item()}")
+            if iteration % args.save_interval == 0:
+                dist_util.save_checkpoint(model, os.path.join(args.save_dir, f"segmentor_{iteration}.pt"))
+            if iteration % args.log_interval == 0:
+                print(f"epoch {epoch}, iter {i}, loss {loss.item()}")
+            iteration += 1
 
 
 def load_pretrained_ddpm(args):
@@ -85,6 +90,9 @@ if __name__ == "__main__":
     parser.add_argument("--num_workers", type=int, default=0)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--lr", type=float, default=1e-4)
+
+    parser.add_argument("--save_interval", type=int, default=1000)
+    parser.add_argument("--log_interval", type=int, default=10)
 
     parser.add_argument("--num_support", type=int, default=5, help="cardinality of support set")
 
