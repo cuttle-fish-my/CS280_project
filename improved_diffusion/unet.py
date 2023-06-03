@@ -383,8 +383,6 @@ class DecoderBlock(nn.Module):
         target, support = self.conv(target, support)
         return target, support
 
-    pass
-
 
 class DecoderCrossConvBlock(nn.Module):
     def __init__(self, in_channel: Tuple[int, int], out_channel, kernel_size:int=3) -> None:
@@ -406,6 +404,7 @@ class DecoderCrossConvBlock(nn.Module):
             stride=1,
             padding=self.kernel_size//2,
         )
+        self.nonlin = nn.LeakyReLU()
 
     def forward(self, target: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
         """
@@ -428,6 +427,7 @@ class DecoderCrossConvBlock(nn.Module):
         concat = torch.cat([target, support], dim=2)
         concat = concat.reshape(B*S, self.concat_channel, H, W)
         out = self.conv(concat)
+        out = self.nonlin(out)
         out = out.reshape(B, S, self.out_channel, H, W)
         target = out.mean(dim=1)
         support = out
