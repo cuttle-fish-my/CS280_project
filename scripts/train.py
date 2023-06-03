@@ -53,7 +53,9 @@ def main(args):
             if iteration % args.save_interval == 0:
                 dist_util.save_checkpoint(model, os.path.join(args.save_dir, f"segmentor_{iteration}.pt"))
             if iteration % args.log_interval == 0:
-                print(f"epoch {epoch}, iter {i}, loss {loss.item()}")
+                logger.logkv("iteration", iteration)
+                logger.logkv_mean("loss", loss.item())
+                logger.dumpkvs()
             iteration += 1
 
 
@@ -91,7 +93,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-4)
 
     parser.add_argument("--save_interval", type=int, default=1000)
-    parser.add_argument("--log_interval", type=int, default=10)
+    parser.add_argument("--log_interval", type=int, default=1)
 
     parser.add_argument("--num_support", type=int, default=5, help="cardinality of support set")
 

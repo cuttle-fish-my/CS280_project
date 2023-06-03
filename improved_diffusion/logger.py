@@ -40,7 +40,7 @@ class HumanOutputFormat(KVWriter, SeqWriter):
             self.own_file = True
         else:
             assert hasattr(filename_or_file, "read"), (
-                    "expected file or str, got %s" % filename_or_file
+                "expected file or str, got %s" % filename_or_file
             )
             self.file = filename_or_file
             self.own_file = False
@@ -209,11 +209,112 @@ def make_output_format(format, ev_dir, log_suffix=""):
 # ================================================================
 
 
+def logkv(key, val):
+    """
+    Log a value of some diagnostic
+    Call this once for each diagnostic quantity, each iteration
+    If called many times, last value will be used.
+    """
+    get_current().logkv(key, val)
+
+
+def logkv_mean(key, val):
+    """
+    The same as logkv(), but if called many times, values averaged.
+    """
+    get_current().logkv_mean(key, val)
+
+
+def logkvs(d):
+    """
+    Log a dictionary of key-value pairs
+    """
+    for (k, v) in d.items():
+        logkv(k, v)
+
+
+def dumpkvs():
+    """
+    Write all of the diagnostics from the current iteration
+    """
+    return get_current().dumpkvs()
+
+
+def getkvs():
+    return get_current().name2val
+
+
 def log(*args, level=INFO):
     """
     Write the sequence of args, with no separators, to the console and output files (if you've configured an output file).
     """
     get_current().log(*args, level=level)
+
+
+def debug(*args):
+    log(*args, level=DEBUG)
+
+
+def info(*args):
+    log(*args, level=INFO)
+
+
+def warn(*args):
+    log(*args, level=WARN)
+
+
+def error(*args):
+    log(*args, level=ERROR)
+
+
+def set_level(level):
+    """
+    Set logging threshold on current logger.
+    """
+    get_current().set_level(level)
+
+
+def set_comm(comm):
+    get_current().set_comm(comm)
+
+
+def get_dir():
+    """
+    Get directory that log files are being written to.
+    will be None if there is no output directory (i.e., if you didn't call start)
+    """
+    return get_current().get_dir()
+
+
+record_tabular = logkv
+dump_tabular = dumpkvs
+
+
+@contextmanager
+def profile_kv(scopename):
+    logkey = "wait_" + scopename
+    tstart = time.time()
+    try:
+        yield
+    finally:
+        get_current().name2val[logkey] += time.time() - tstart
+
+
+def profile(n):
+    """
+    Usage:
+    @profile("my_func")
+    def my_func(): code
+    """
+
+    def decorator_with_name(func):
+        def func_wrapper(*args, **kwargs):
+            with profile_kv(n):
+                return func(*args, **kwargs)
+
+        return func_wrapper
+
+    return decorator_with_name
 
 
 # ================================================================
@@ -373,3 +474,21 @@ def configure(dir=None, format_strs=None, comm=None, log_suffix=""):
 def _configure_default_logger():
     configure()
     Logger.DEFAULT = Logger.CURRENT
+
+
+def reset():
+    if Logger.CURRENT is not Logger.DEFAULT:
+        Logger.CURRENT.close()
+        Logger.CURRENT = Logger.DEFAULT
+        log("Reset logger")
+
+
+@contextmanager
+def scoped_configure(dir=None, format_strs=None, comm=None):
+    prevlogger = Logger.CURRENT
+    configure(dir=dir, format_strs=format_strs, comm=comm)
+    try:
+        yield
+    finally:
+        Logger.CURRENT.close()
+        Logger.CURRENT = prevlogger
