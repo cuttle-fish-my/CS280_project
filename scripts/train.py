@@ -3,7 +3,7 @@ import torch
 import os
 import sys
 
-local_rank = int(os.environ["LOCAL_RANK"])
+local_rank = int(os.environ.get("LOCAL_RANK", 0))
 sys.path.append(os.path.dirname(sys.path[0]))
 
 import torch.distributed as dist
@@ -26,7 +26,8 @@ def main(args):
     model, diffusion, decoder = load_pretrained_ddpm(args)
     # model, diffusion = load_pretrained_ddpm(args)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    model = DDP(model, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
+    model = DDP(model, device_ids=[local_rank], output_device=local_rank,
+                broadcast_buffers=False) if torch.cuda.is_available() else model
     dataset = Dataset(resolution=args.image_size,
                       root=args.data_dir,
                       filename_pickle=args.filename_pickle,
@@ -94,5 +95,9 @@ if __name__ == "__main__":
     opts = parser.parse_args()
     if torch.cuda.is_available():
         torch.cuda.set_device(local_rank)
+        os.environ.setdefault("MASTER_PORT", "12355")
+        os.environ.setdefault("MASTER_ADDR", "localhost")
+        os.environ.setdefault("WORLD_SIZE", "1")
+        os.environ.setdefault("RANK", str(local_rank))
         dist.init_process_group(backend="nccl", init_method="env://")
     main(opts)
