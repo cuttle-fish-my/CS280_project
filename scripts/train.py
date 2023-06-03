@@ -37,9 +37,9 @@ def main(args):
                       shuffle=True,
                       num_workers=args.num_workers,
                       drop_last=True)
-    sampler = DistributedSampler(dataset, shuffle=True)
+    # sampler = DistributedSampler(dataset, shuffle=True)
     dataloader = DataLoader(dataset=dataset,
-                            sampler=sampler,
+                            # sampler=sampler,
                             num_workers=0)
     for epoch in range(args.epochs):
         # sampler.set_epoch(epoch)
