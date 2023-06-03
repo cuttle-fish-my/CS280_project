@@ -19,7 +19,7 @@ def main(args):
     logger.configure(args.save_dir)
 
     logger.log("creating model and diffusion...")
-    model, diffusion = load_pretrained_ddpm(args)
+    model, diffusion, decoder = load_pretrained_ddpm(args)
     dataset = Dataset(resolution=args.image_size,
                       root=args.data_dir,
                       filename_pickle=args.filename_pickle,
@@ -53,11 +53,13 @@ def load_pretrained_ddpm(args):
         "diffusion_steps": 4000,
         "noise_schedule": "cosine"
     })
-    model, diffusion = create_model_and_diffusion(**DDPM_args)
+    model, diffusion, decoder = create_model_and_diffusion(**DDPM_args)
     model.load_state_dict(torch.load(args.DDPM_dir, map_location="cpu"))
     model.to(dist_util.dev())
     model.eval()
-    return model, diffusion
+    decoder.to(dist_util.dev())
+    decoder.train()
+    return model, diffusion, decoder
 
 
 if __name__ == "__main__":

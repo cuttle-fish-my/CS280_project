@@ -902,32 +902,32 @@ class CrossConvolutionDecoder(nn.Module):
                 ds *= 2
         
         ### Original decoder with ResBlocks replaced
-        self.decoder = nn.ModuleList([])
-        for level, mult in list(enumerate(channel_mult))[::-1]:
-            for i in range(num_res_blocks + 1):
-                layers = [
-                    DecoderResBlock(
-                        ch + input_block_chans.pop(),
-                        dropout,
-                        out_channels=model_channels * mult,
-                        dims=dims,
-                        use_checkpoint=use_checkpoint,
-                        use_scale_shift_norm=use_scale_shift_norm,
-                    )
-                ]
-                ch = model_channels * mult
-                if ds in attention_resolutions:
-                    layers.append(
-                        AttentionBlock(
-                            ch,
-                            use_checkpoint=use_checkpoint,
-                            num_heads=num_heads_upsample,
-                        )
-                    )
-                if level and i == num_res_blocks:
-                    layers.append(Upsample(ch, conv_resample, dims=dims))
-                    ds //= 2
-                self.decoder.append(TimestepEmbedSequential(*layers))
+        # self.decoder = nn.ModuleList([])
+        # for level, mult in list(enumerate(channel_mult))[::-1]:
+        #     for i in range(num_res_blocks + 1):
+        #         layers = [
+        #             DecoderResBlock(
+        #                 ch + input_block_chans.pop(),
+        #                 dropout,
+        #                 out_channels=model_channels * mult,
+        #                 dims=dims,
+        #                 use_checkpoint=use_checkpoint,
+        #                 use_scale_shift_norm=use_scale_shift_norm,
+        #             )
+        #         ]
+        #         ch = model_channels * mult
+        #         if ds in attention_resolutions:
+        #             layers.append(
+        #                 AttentionBlock(
+        #                     ch,
+        #                     use_checkpoint=use_checkpoint,
+        #                     num_heads=num_heads_upsample,
+        #                 )
+        #             )
+        #         if level and i == num_res_blocks:
+        #             layers.append(Upsample(ch, conv_resample, dims=dims))
+        #             ds //= 2
+        #         self.decoder.append(TimestepEmbedSequential(*layers))
 
         ### Replace blocks(layers) in decoder with cross convolution layer
         channel_sum = ch + sum(input_block_chans)
