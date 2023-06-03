@@ -458,12 +458,13 @@ class DecoderConvBlock(nn.Module):
             padding_mode="zeros",
             bias=True,
         )
-        # nonlinear needed? LeakyReLU()?
-        # self.nonlin = nn.LeakyReLU()
+        self.nonlin = nn.LeakyReLU()
 
     def forward(self, target: torch.Tensor, support: torch.Tensor):
         target = self.conv(target)
+        target = self.nonlin(target)
         support = self.conv(support)
+        support = self.nonlin(support)
         return target, support
 
 
