@@ -6,6 +6,7 @@ import torch
 from PIL import Image
 import numpy as np
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
+from tqdm import tqdm
 
 
 class COCOCategoryLoaderDataset(Dataset):
@@ -39,7 +40,7 @@ class COCOCategoryLoaderDataset(Dataset):
         label_id_map = pickle.load(open(label_id_map, 'rb'))
         self.dataLoader = []
         self.weights = []
-        for key, value in label_id_map.items():
+        for key, value in tqdm(label_id_map.items(), desc="Loading dataset"):
             dataset = COCODataset(resolution, root, key, value, filename_pickle, num_support=num_support, train=train)
             self.weights.append(len(dataset))
             self.dataLoader.append(
