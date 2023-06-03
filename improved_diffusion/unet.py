@@ -449,7 +449,7 @@ class DecoderConvBlock(nn.Module):
         else:
             raise NotImplementedError
         
-        self.conv = nn.Conv2d(
+        self.conv_target = nn.Conv2d(
             in_channels=self.in_channels,
             out_channels=self.out_channels,
             kernel_size=self.kernel_size,
@@ -458,13 +458,23 @@ class DecoderConvBlock(nn.Module):
             padding_mode="zeros",
             bias=True,
         )
-        self.nonlin = nn.LeakyReLU()
+        self.conv_support = nn.Conv2d(
+            in_channels=self.in_channels,
+            out_channels=self.out_channels,
+            kernel_size=self.kernel_size,
+            stride=1,
+            padding=self.kernel_size // 2,
+            padding_mode="zeros",
+            bias=True,
+        )
+        self.nonlin_target = nn.LeakyReLU()
+        self.nonlin_support = nn.LeakyReLU()
 
     def forward(self, target: torch.Tensor, support: torch.Tensor):
-        target = self.conv(target)
-        target = self.nonlin(target)
-        support = self.conv(support)
-        support = self.nonlin(support)
+        target = self.conv_target(target)
+        target = self.nonlin_target(target)
+        support = self.conv_support(support)
+        support = self.nonlin_support(support)
         return target, support
 
 
