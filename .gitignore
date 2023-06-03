@@ -2,5 +2,7 @@
 __pycache__/
 datasets/COCO
 .idea
-
 /checkpoints/DDPM_pretrained.pt
+.vscode
+/result
+*.egg-info
