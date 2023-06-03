@@ -972,8 +972,8 @@ class CrossConvolutionDecoder(nn.Module):
             The batch dimension for the support and label is removed as a batch share the whole support set
 
             target: [B, C', H', W']
-            support: [B, S, C', H', W'] / [S, C', H', W']
-            label: [B, S, C, H, W] / [S, C, H, W]
+            support: [S, C', H', W']
+            label: [S, 1, H, W]
             hs_t: List of hidden states from the target passing encoder
             hs_s: List of hidden states from the support passing encoder
         Output:
@@ -987,11 +987,9 @@ class CrossConvolutionDecoder(nn.Module):
         if len(support.shape) == 4:
             assert support.shape[0] == label.shape[0]
             support = support[None].repeat(B, 1, 1, 1, 1)
-        elif len(support.shape) == 5:
-            assert support.shape[0] == target.shape[0]
-            assert support.shape[:2] == label.shape[:2]
+            label = label[None].repeat(B, 1, 1, 1, 1)
         else:
-            print("only handle support in length 4 or 5 in shape, having:", len(support.shape), support.shape)
+            print("only handle support set in length 4 in shape, having:", len(support.shape), support.shape)
 
         target, hs_t = self.SENetBlock(target, hs_t)
 
@@ -1019,34 +1017,29 @@ class UNetAndDecoder(nn.Module):
         """
         Args:
             target: [B, C, H, W]
-            support: [B, S, C, H, W] / [S, C, H, W]
-            label: [B, S, C, H, W] / [S, C, H, W]
-            timestep:
+            support: [S, C, H, W]
+            label: [S, H, W]
+            timestep: 
         Out:
             out: [B, out_channel, H, W] -> predicted binary classification
         """
-        assert target.shape[-3:] == support.shape[-3:] == label.shape[-3:]
+        assert target.shape[-3:] == support.shape[-3:]
+        assert support.shape[-2:] == label.shape[-2:]
 
         result_target = self.model.get_feature_vectors(target, timestep)
         target = result_target['middle']
         hs_t = result_target['down']
-
+        
+        label = label.unsqueeze(-3)
         assert len(support.shape) == len(label.shape)
-        if len(support.shape) == 5:
-            assert support.shape[:2] == label.shape[:2]
-            B, S, *_ = support.shape
-            support = support.view(B * S, *support.shape[2:])
-            result_support = self.model.get_feature_vectors(support, timestep)
-            support = result_support['middle'].view(B, S, *result_support['middle'].shape[1:])
-            hs_s = []
-            for h_s in result_support['down']:
-                hs_s.append(h_s.view(B, S, *h_s.shape[1:]))
-        elif len(support.shape) == 4:
-            assert support.shape[0] == label.shape[0]
-            B, *_ = support.shape
+        assert support.shape[0] == label.shape[0]
+        if len(support.shape) == 4:
             result_support = self.model.get_feature_vectors(support, timestep)
             support = result_support['middle']
             hs_s = result_support['down']
+        else:
+            print("only handle support set in shape [S, C, H, W], having:", support.shape)
+            raise NotImplementedError
 
         out = self.decoder(target, support, label, hs_t, hs_s)
         return out
