@@ -23,7 +23,7 @@ def main(args):
         logger.configure(args.save_dir)
         logger.log("creating model and diffusion...")
     model = load_pretrained_ddpm(args)
-    optimizer = torch.optim.Adam(model.decoder.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(model.decoder.parameters(), lr=args.lr)
     model = DDP(model, device_ids=[local_rank], output_device=local_rank,
                 broadcast_buffers=False, find_unused_parameters=True) if torch.cuda.is_available() else model
     dataset = Dataset(resolution=args.image_size,
