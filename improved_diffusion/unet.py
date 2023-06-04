@@ -61,29 +61,62 @@ class DoubleInDoubleOutSequential(nn.Sequential):
         return x1, x2
 
 
+class LabelEmbedding(nn.Module):
+    def __init__(self, label_dim: int, emb_dim: int, image_size: int = 64):
+        super().__init__()
+        self.conv1 = nn.Conv2d(label_dim, emb_dim // 8, kernel_size=3, padding=1)
+        self.pool1 = nn.AvgPool2d(2)
+        self.conv2 = nn.Conv2d(emb_dim // 8, emb_dim // 4, kernel_size=3, padding=1)
+        self.pool2 = nn.AvgPool2d(2)
+        # self.conv3 = nn.Conv2d(label_dim, emb_dim // 8, kernel_size=3, padding=1)
+        # self.pool3 = nn.AvgPool2d(2)
+        # self.conv4 = nn.Conv2d(label_dim, emb_dim // 4, kernel_size=3, padding=1)
+        # self.pool4 = nn.AvgPool2d(2)
+        self.conv5 = nn.Conv2d(emb_dim // 4, emb_dim // 2, kernel_size=3, padding=1)
+        self.pool5 = nn.AdaptiveAvgPool2d((1, 1))
+        self.linear = nn.Linear(emb_dim // 2, emb_dim)
+
+    def forward(self, label: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            label: [S, H, W]
+        Out:
+            label_embed: [S, C_l]
+        """
+        label = label.unsqueeze(1)
+        label = self.conv1(label)
+        label = self.pool1(label)
+        label = self.conv2(label)
+        label = self.pool2(label)
+        # label = self.conv3(label)
+        # label = self.pool3(label)
+        # label = self.conv4(label)
+        # label = self.pool4(label)
+        label = self.conv5(label)
+        label = self.pool5(label)
+        label = label.squeeze(3).squeeze(2)
+        label = self.linear(label)
+        return label
+
+
 class FiLM(nn.Module):
     """Feature-wise linear modulation."""
 
-    def __init__(self, H: int, W: int, channel_num: int, C: int = 1):
+    def __init__(self, embed_ch: int, channel_num: int,):
         super().__init__()
-        emb_ch = H * W * C
-        self.H = H
-        self.W = W
-        self.C = C
+        self.emb_ch = embed_ch
         self.channel_num = channel_num
-        self.flat = nn.Flatten(start_dim=2)
-        self.dense = nn.Linear(emb_ch, 2 * channel_num)
+        self.dense = nn.Linear(self.emb_ch, 2 * channel_num)
 
     def forward(self, support: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
         """
         Args:
             support: [B, S, C', H', W']
-            label: [B, S, 1, H, W]
+            label_embed: [B, S, C_l]
         Out:
             support: [B, S, C', H', W']
         """
         B, S, *_ = label.shape
-        label = self.flat(label)
         label = label.reshape((B * S, label.shape[-1]))
         emb = self.dense(label)
         emb = emb.reshape((B, S, emb.shape[-1]))
@@ -960,16 +993,16 @@ class CrossConvolutionDecoder(nn.Module):
         # Replace blocks(layers) in decoder with cross convolution layer
         channel_sum = ch + sum(input_block_chans)
         self.SENetBlock = SENetBlock(channel_sum)
+        self.label_emb = LabelEmbedding(1, 1024)
         self.decoder = nn.ModuleList([])
         for level, mult in list(enumerate(channel_mult))[::-1]:
             for i in range(num_res_blocks + 1):
-                # self.decoder.append(
-                #     FiLM(
-                #         self.original_H,
-                #         self.original_W,
-                #         ch
-                #     )
-                # )
+                self.decoder.append(
+                    FiLM(
+                        1024, 
+                        ch,
+                    )
+                )
                 layers = [
                     DecoderBlock(
                         ch + input_block_chans.pop(),
@@ -989,7 +1022,7 @@ class CrossConvolutionDecoder(nn.Module):
             zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
         )
 
-    def forward(self, target: torch.Tensor, support: torch.Tensor, hs_t: list, hs_s: list):
+    def forward(self, target: torch.Tensor, support: torch.Tensor, label: torch.Tensor, hs_t: list, hs_s: list):
         """
         Input:
             H and W is for the original spatial resolution
@@ -999,6 +1032,7 @@ class CrossConvolutionDecoder(nn.Module):
 
             target: [B, C', H', W']
             support: [S, C', H', W']
+            label: [S, H, W]
             hs_t: List of hidden states from the target passing encoder
             hs_s: List of hidden states from the support passing encoder
         Output:
@@ -1010,18 +1044,19 @@ class CrossConvolutionDecoder(nn.Module):
         #     print("the label shape length and support length is not consistent, please check")
         #     raise ValueError
         if len(support.shape) == 4:
-            # assert support.shape[0] == label.shape[0]
+            assert support.shape[0] == label.shape[0]
             support = support[None].repeat(B, 1, 1, 1, 1)
-            # label = label[None].repeat(B, 1, 1, 1, 1)
         else:
             print("only handle support set in length 4 in shape, having:", len(support.shape), support.shape)
 
         target, hs_t = self.SENetBlock(target, hs_t)
+        label_emb = self.label_emb(label)
+        label_emb = label_emb[None].repeat(B, 1, 1)
 
         for module in self.decoder:
             if isinstance(module, FiLM):
-                print("SHOULD NOT HAVE FiLM IN DECODER, PLEASE CHECK")
-                # support = module(support, label)
+                # print("SHOULD NOT HAVE FiLM IN DECODER, PLEASE CHECK")
+                support = module(support, label_emb)
             else:
                 hidden_t = hs_t.pop()
                 B = hidden_t.shape[0]
@@ -1061,10 +1096,7 @@ class UNetAndDecoder(nn.Module):
         target = result_target['middle']
         hs_t = result_target['down']
         
-        label = label.unsqueeze(-3)
-        assert len(support.shape) == len(label.shape)
         assert support.shape[0] == label.shape[0]
-        support = support * label
         if len(support.shape) == 4:
             timestep = torch.tensor([0] * support.shape[0], device=support.device)
             result_support = self.model.get_feature_vectors(support, timestep)
@@ -1074,5 +1106,5 @@ class UNetAndDecoder(nn.Module):
             print("only handle support set in shape [S, C, H, W], having:", support.shape)
             raise NotImplementedError
 
-        out = nn.Sigmoid()(self.decoder(target, support, hs_t, hs_s))
+        out = nn.Sigmoid()(self.decoder(target, support, label, hs_t, hs_s))
         return out.squeeze(1)
