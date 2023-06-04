@@ -17,12 +17,13 @@ from improved_diffusion.script_util import (
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP
 from improved_diffusion.unet import UNetAndDecoder
 
+
 def main(args):
     if local_rank == 0:
         logger.configure(args.save_dir)
         logger.log("creating model and diffusion...")
     model = load_pretrained_ddpm(args)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(model.decoder.parameters(), lr=1e-4)
     model = DDP(model, device_ids=[local_rank], output_device=local_rank,
                 broadcast_buffers=False, find_unused_parameters=True) if torch.cuda.is_available() else model
     dataset = Dataset(resolution=args.image_size,
@@ -37,7 +38,7 @@ def main(args):
                       drop_last=True)
     dataloader = DataLoader(dataset=dataset,
                             num_workers=0)
-    iteration = 0
+    iteration = 0 if args.segmentor_dir is None else int(args.segmentor_dir.split("_")[-1].split(".")[0])
     for i, batch in enumerate(dataloader):
         # pred = model(batch["img"], timesteps=torch.tensor([0] * args.batch_size))
         img = batch["img"]
@@ -59,6 +60,12 @@ def main(args):
         iteration += 1
         if iteration > args.iteration:
             break
+        anneal_lr(optimizer, iteration, args.iteration)
+
+
+def anneal_lr(optimizer, iteration, total_iteration):
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = param_group['lr'] * (1 - iteration / total_iteration)
 
 
 def load_pretrained_ddpm(args):
