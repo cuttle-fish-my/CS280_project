@@ -963,13 +963,13 @@ class CrossConvolutionDecoder(nn.Module):
         self.decoder = nn.ModuleList([])
         for level, mult in list(enumerate(channel_mult))[::-1]:
             for i in range(num_res_blocks + 1):
-                self.decoder.append(
-                    FiLM(
-                        self.original_H,
-                        self.original_W,
-                        ch
-                    )
-                )
+                # self.decoder.append(
+                #     FiLM(
+                #         self.original_H,
+                #         self.original_W,
+                #         ch
+                #     )
+                # )
                 layers = [
                     DecoderBlock(
                         ch + input_block_chans.pop(),
@@ -989,7 +989,7 @@ class CrossConvolutionDecoder(nn.Module):
             zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
         )
 
-    def forward(self, target: torch.Tensor, support: torch.Tensor, label: torch.Tensor, hs_t: list, hs_s: list):
+    def forward(self, target: torch.Tensor, support: torch.Tensor, hs_t: list, hs_s: list):
         """
         Input:
             H and W is for the original spatial resolution
@@ -999,7 +999,6 @@ class CrossConvolutionDecoder(nn.Module):
 
             target: [B, C', H', W']
             support: [S, C', H', W']
-            label: [S, 1, H, W]
             hs_t: List of hidden states from the target passing encoder
             hs_s: List of hidden states from the support passing encoder
         Output:
@@ -1007,13 +1006,13 @@ class CrossConvolutionDecoder(nn.Module):
         Like what is done in Unet decoder, first concatenation then pass to model
         """
         B, *_ = target.shape
-        if len(label.shape) != len(support.shape):
-            print("the label shape length and support length is not consistent, please check")
-            raise ValueError
+        # if len(label.shape) != len(support.shape):
+        #     print("the label shape length and support length is not consistent, please check")
+        #     raise ValueError
         if len(support.shape) == 4:
-            assert support.shape[0] == label.shape[0]
+            # assert support.shape[0] == label.shape[0]
             support = support[None].repeat(B, 1, 1, 1, 1)
-            label = label[None].repeat(B, 1, 1, 1, 1)
+            # label = label[None].repeat(B, 1, 1, 1, 1)
         else:
             print("only handle support set in length 4 in shape, having:", len(support.shape), support.shape)
 
@@ -1021,7 +1020,8 @@ class CrossConvolutionDecoder(nn.Module):
 
         for module in self.decoder:
             if isinstance(module, FiLM):
-                support = module(support, label)
+                print("SHOULD NOT HAVE FiLM IN DECODER, PLEASE CHECK")
+                # support = module(support, label)
             else:
                 hidden_t = hs_t.pop()
                 B = hidden_t.shape[0]
@@ -1064,6 +1064,7 @@ class UNetAndDecoder(nn.Module):
         label = label.unsqueeze(-3)
         assert len(support.shape) == len(label.shape)
         assert support.shape[0] == label.shape[0]
+        support = support * label
         if len(support.shape) == 4:
             timestep = torch.tensor([0] * support.shape[0], device=support.device)
             result_support = self.model.get_feature_vectors(support, timestep)
@@ -1073,5 +1074,5 @@ class UNetAndDecoder(nn.Module):
             print("only handle support set in shape [S, C, H, W], having:", support.shape)
             raise NotImplementedError
 
-        out = nn.Sigmoid()(self.decoder(target, support, label, hs_t, hs_s))
+        out = nn.Sigmoid()(self.decoder(target, support, hs_t, hs_s))
         return out.squeeze(1)
