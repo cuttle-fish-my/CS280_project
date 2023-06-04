@@ -23,7 +23,7 @@ def main(args):
         logger.configure(args.save_dir)
         logger.log("creating model and diffusion...")
     model = load_pretrained_ddpm(args)
-    optimizer = torch.optim.Adam(model.decoder.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(model.decoder.parameters(), lr=args.lr)
     model = DDP(model, device_ids=[local_rank], output_device=local_rank,
                 broadcast_buffers=False, find_unused_parameters=True) if torch.cuda.is_available() else model
     dataset = Dataset(resolution=args.image_size,
@@ -51,7 +51,7 @@ def main(args):
         loss.backward()
         optimizer.step()
         if iteration % args.save_interval == 0:
-            dist_util.save_checkpoint(model, os.path.join(args.save_dir, f"segmentor_{iteration}.pt"))
+            dist_util.save_checkpoint(model, args.save_dir, iteration)
         if iteration % args.log_interval == 0:
             if local_rank == 0:
                 logger.logkv("iteration", iteration)
@@ -60,7 +60,7 @@ def main(args):
         iteration += 1
         if iteration > args.iteration:
             break
-        anneal_lr(optimizer, iteration, args.iteration)
+        # anneal_lr(optimizer, iteration, args.iteration)
 
 
 def anneal_lr(optimizer, iteration, total_iteration):
@@ -79,8 +79,8 @@ def load_pretrained_ddpm(args):
     unet, segmentor = create_unet_and_segmentor(**DDPM_args)
     dist_util.load_checkpoint(args.DDPM_dir, unet)
     dist_util.load_checkpoint(args.segmentor_dir, segmentor)
-    unet.requires_grad_(False)
-    unet.eval()
+    # unet.requires_grad_(False)
+    # unet.eval()
     model = UNetAndDecoder(unet, segmentor)
     return model
 
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     parser.add_argument("--image_size", type=int, default=64)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--num_workers", type=int, default=0)
-    parser.add_argument("--iteration", type=int, default=5e6)
+    parser.add_argument("--iteration", type=int, default=5e3)
     parser.add_argument("--lr", type=float, default=1e-4)
 
     parser.add_argument("--save_interval", type=int, default=1000)

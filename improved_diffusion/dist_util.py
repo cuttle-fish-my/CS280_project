@@ -1,6 +1,8 @@
 """
 Helpers for distributed training.
 """
+import os
+
 import torch as th
 import torch.distributed as dist
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP
@@ -42,11 +44,12 @@ def sync_params(params):
             dist.broadcast(p, 0)
 
 
-def save_checkpoint(model, path):
+def save_checkpoint(model, path, iteration):
     """
     Save a checkpoint to disk.
     """
     if dist.get_rank() == 0:
         if isinstance(model, DDP):
             model = model.module
-        th.save(model.decoder.state_dict(), path)
+        th.save(model.decoder.state_dict(), os.path.join(path, f"segmentor_{iteration}.pt"))
+        th.save(model.model.state_dict(), os.path.join(path, f"unet_{iteration}.pt"))

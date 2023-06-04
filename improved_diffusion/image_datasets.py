@@ -41,6 +41,9 @@ class COCOCategoryLoaderDataset(Dataset):
         self.dataLoader = []
         self.weights = []
         for key, value in tqdm(label_id_map.items(), desc="Loading dataset"):
+            file_list = pickle.load(open(filename_pickle, 'rb'))[key]
+            if len(file_list) < num_support + batch_size:
+                continue
             dataset = COCODataset(resolution, root, key, value, filename_pickle, num_support=num_support, train=train)
             self.weights.append(len(dataset))
             self.dataLoader.append(
@@ -163,9 +166,12 @@ class COCODataLoader(DataLoader):
 
 
 if __name__ == "__main__":
-    coco = COCOCategoryLoaderDataset(128, "../datasets/COCO", "../datasets/COCO/train_filenames.pkl",
-                                     "../datasets/COCO/categories.pkl", batch_size=2, shuffle=True, num_workers=0)
+    file_list = pickle.load(open("../datasets/COCO/train_filenames_sieved.pkl", 'rb'))
+    coco = COCOCategoryLoaderDataset(128, "../datasets/COCO", "../datasets/COCO/train_filenames_sieved.pkl",
+                                     "../datasets/COCO/categories.pkl", batch_size=10, shuffle=True, num_workers=0,
+                                     num_support=20)
     dataloader = COCOCategoryLoaderDataLoader(dataset=coco, num_workers=0)
     for batch in dataloader:
         print(batch['category'])
         print(batch['idx'])
+    # print(1)
