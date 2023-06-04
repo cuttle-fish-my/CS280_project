@@ -23,7 +23,9 @@ def main(args):
         logger.configure(args.save_dir)
         logger.log("creating model and diffusion...")
     model = load_pretrained_ddpm(args)
-    optimizer = torch.optim.Adam(model.decoder.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(
+        model.parameters() if not args.freeze_ddpm else model.decoder.parameters(),
+        lr=args.lr)
     model = DDP(model, device_ids=[local_rank], output_device=local_rank,
                 broadcast_buffers=False, find_unused_parameters=True) if torch.cuda.is_available() else model
     dataset = Dataset(resolution=args.image_size,
@@ -40,7 +42,6 @@ def main(args):
                             num_workers=0)
     iteration = 0 if args.segmentor_dir is None else int(args.segmentor_dir.split("_")[-1].split(".")[0])
     for i, batch in enumerate(dataloader):
-        # pred = model(batch["img"], timesteps=torch.tensor([0] * args.batch_size))
         img = batch["img"]
         label = batch["label"]
         support_img = batch["support_img"]
@@ -60,7 +61,7 @@ def main(args):
         iteration += 1
         if iteration > args.iteration:
             break
-        # anneal_lr(optimizer, iteration, args.iteration)
+        anneal_lr(optimizer, iteration, args.iteration)
 
 
 def anneal_lr(optimizer, iteration, total_iteration):
@@ -77,10 +78,13 @@ def load_pretrained_ddpm(args):
         "learn_sigma": True,
     })
     unet, segmentor = create_unet_and_segmentor(**DDPM_args)
+    unet.requires_grad_(False)
+    segmentor.requires_grad_(False)
     dist_util.load_checkpoint(args.DDPM_dir, unet)
     dist_util.load_checkpoint(args.segmentor_dir, segmentor)
-    # unet.requires_grad_(False)
-    # unet.eval()
+    if not args.freeze_ddpm:
+        unet.requires_grad_(True)
+    segmentor.requires_grad_(True)
     model = UNetAndDecoder(unet, segmentor)
     return model
 
@@ -93,13 +97,14 @@ if __name__ == "__main__":
     parser.add_argument("--save_dir", type=str, required=True, help="Path to save model")
 
     parser.add_argument("--segmentor_dir", type=str, required=False, help="Path to segmentor directory")
-    parser.add_argument("--DDPM_dir", type=str, required=True, help="Path to pretrained DDPM")
+    parser.add_argument("--DDPM_dir", type=str, required=False, help="Path to pretrained DDPM")
+    parser.add_argument("--freeze_ddpm", action="store_true", help="Freeze DDPM parameters")
 
     parser.add_argument("--image_size", type=int, default=64)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--num_workers", type=int, default=0)
-    parser.add_argument("--iteration", type=int, default=5e3)
-    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--iteration", type=int, default=1e4)
+    parser.add_argument("--lr", type=float, default=2e-4)
 
     parser.add_argument("--save_interval", type=int, default=1000)
     parser.add_argument("--log_interval", type=int, default=1)
