@@ -51,7 +51,7 @@ def main(args):
         loss.backward()
         optimizer.step()
         if iteration % args.save_interval == 0:
-            dist_util.save_checkpoint(model, os.path.join(args.save_dir, f"segmentor_{iteration}.pt"))
+            dist_util.save_checkpoint(model, args.save_dir, iteration)
         if iteration % args.log_interval == 0:
             if local_rank == 0:
                 logger.logkv("iteration", iteration)
@@ -60,7 +60,7 @@ def main(args):
         iteration += 1
         if iteration > args.iteration:
             break
-        anneal_lr(optimizer, iteration, args.iteration)
+        # anneal_lr(optimizer, iteration, args.iteration)
 
 
 def anneal_lr(optimizer, iteration, total_iteration):
@@ -79,8 +79,8 @@ def load_pretrained_ddpm(args):
     unet, segmentor = create_unet_and_segmentor(**DDPM_args)
     dist_util.load_checkpoint(args.DDPM_dir, unet)
     dist_util.load_checkpoint(args.segmentor_dir, segmentor)
-    unet.requires_grad_(False)
-    unet.eval()
+    # unet.requires_grad_(False)
+    # unet.eval()
     model = UNetAndDecoder(unet, segmentor)
     return model
 
