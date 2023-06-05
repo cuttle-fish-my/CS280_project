@@ -4,7 +4,8 @@ import torch
 import os
 import sys
 from torchvision.utils import make_grid
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 
 local_rank = int(os.environ.get("LOCAL_RANK", 0))
 sys.path.append(os.path.dirname(sys.path[0]))
