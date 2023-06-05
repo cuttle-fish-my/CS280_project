@@ -43,10 +43,10 @@ def main(args):
         support_img, support_label = dataset.support_set([batch["idx"]])
         support_img = support_img
         support_label = support_label
-        img = torch.tensor(img, dtype=torch.float32).to(dist_util.dev())
-        label = torch.tensor(label, dtype=torch.float32).to(dist_util.dev())
-        support_img = torch.tensor(support_img, dtype=torch.float32).to(dist_util.dev())
-        support_label = torch.tensor(support_label, dtype=torch.float32).to(dist_util.dev())
+        img = torch.tensor(img, dtype=torch.float32).to(dev())
+        label = torch.tensor(label, dtype=torch.float32).to(dev())
+        support_img = torch.tensor(support_img, dtype=torch.float32).to(dev())
+        support_label = torch.tensor(support_label, dtype=torch.float32).to(dev())
         pred = model(img, support_img, support_label)
         iou += IoU(pred, label)
         pred = pred > 0.5
@@ -78,7 +78,7 @@ def load_pretrained_ddpm(args):
     segmentor.load_state_dict(torch.load(os.path.join(args.segmentor_dir), map_location="cpu"))
     model = UNetAndDecoder(unet, segmentor)
     model.eval()
-    model.to(dist_util.dev())
+    model.to(dev())
     return model
 
 
