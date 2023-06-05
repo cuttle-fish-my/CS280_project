@@ -4,23 +4,23 @@ import pickle
 import torch
 import os
 import sys
-from torchvision.utils import make_grid
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 sys.path.append(os.path.dirname(sys.path[0]))
 
-import torch.distributed as dist
 from improved_diffusion import dist_util, logger
 from improved_diffusion.image_datasets import COCODataset as Dataset
-from improved_diffusion.image_datasets import COCOCategoryLoaderDataLoader as DataLoader
 from improved_diffusion.script_util import (
     model_and_diffusion_defaults,
-    create_unet_and_segmentor, create_model, create_segmentor,
+    create_model, create_segmentor,
 )
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP
 from improved_diffusion.unet import UNetAndDecoder
 from PIL import Image
+
+
+def dev():
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def main(args):
