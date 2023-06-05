@@ -77,13 +77,15 @@ def main(args):
         iteration += 1
         if iteration > args.iteration:
             break
+        anneal_lr(optimizer, iteration, args)
     writer.close()
-        # anneal_lr(optimizer, iteration, args.iteration)
 
 
-def anneal_lr(optimizer, iteration, total_iteration):
+def anneal_lr(optimizer, iteration, args):
+    if iteration > args.iteration * 0.99:
+        return
     for param_group in optimizer.param_groups:
-        param_group['lr'] = param_group['lr'] * (1 - iteration / total_iteration)
+        param_group['lr'] = args.lr * (1 - iteration / args.iteration)
 
 
 def load_pretrained_ddpm(args):
