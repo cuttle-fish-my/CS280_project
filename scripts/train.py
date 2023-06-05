@@ -71,15 +71,16 @@ def main(args):
             writer.add_image("Images/support_label", grid_support_label, iteration)
         if iteration % args.save_interval == 0:
             dist_util.save_checkpoint(model, args.save_dir, iteration)
+        iteration += 1
         if iteration % args.log_interval == 0:
             if local_rank == 0:
                 logger.logkv("iteration", iteration)
                 logger.logkv_mean("loss", loss.item())
                 logger.dumpkvs()
-        iteration += 1
         if iteration > args.iteration:
+            dist_util.save_checkpoint(model, args.save_dir, iteration)
             break
-        anneal_lr(optimizer, iteration, args)
+        # anneal_lr(optimizer, iteration, args)
     writer.close()
 
 
@@ -128,7 +129,7 @@ if __name__ == "__main__":
     parser.add_argument("--image_size", type=int, default=64)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--num_workers", type=int, default=0)
-    parser.add_argument("--iteration", type=int, default=1200)
+    parser.add_argument("--iteration", type=int, default=4200)
     parser.add_argument("--lr", type=float, default=1e-4)
 
     parser.add_argument("--save_interval", type=int, default=1000)
