@@ -53,7 +53,17 @@ def main(args):
         pred = pred[0].cpu().numpy()
         pred = pred.astype("uint8")[0]
         pred = Image.fromarray(pred * 255)
-        pred.save(os.path.join(args.save_dir, args.ft_category, batch["name"]))
+        label = label > 0.5
+        label = label[0].cpu().numpy()
+        label = label.astype("uint8")
+        label = Image.fromarray(label * 255)
+        img = img[0].cpu().numpy()
+        img = (img + 1) / 2 * 255
+        img = img.astype("uint8")
+        img = Image.fromarray(img.transpose(1, 2, 0))
+        pred.save(os.path.join(args.save_dir, args.ft_category, batch["name"].replace(".jpg", "_pred.jpg")))
+        label.save(os.path.join(args.save_dir, args.ft_category, batch["name"].replace(".jpg", "_label.jpg")))
+        img.save(os.path.join(args.save_dir, args.ft_category, batch["name"].replace(".jpg", "_img.jpg")))
     iou /= len(dataset)
     print("IoU: ", iou.item())
 
