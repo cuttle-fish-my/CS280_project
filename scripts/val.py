@@ -34,7 +34,7 @@ def main(args):
                       num_support=args.num_support,
                       train=False)
     iou = 0
-    if not os.path.exists(os.path.join(args.save_dir, args.ft_category)):
+    if not os.path.isdir(os.path.join(args.save_dir, args.ft_category)):
         os.makedirs(args.save_dir)
     for i in tqdm(range(len(dataset))):
         batch = dataset[i]
