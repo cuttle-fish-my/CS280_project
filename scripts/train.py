@@ -2,6 +2,11 @@ import argparse
 import torch
 import os
 import sys
+import datetime
+import tensorflow as tf
+from tensorflow import keras
+from torchvision.utils import make_grid
+from torch.utils.tensorboard import SummaryWriter
 
 local_rank = int(os.environ.get("LOCAL_RANK", 0))
 sys.path.append(os.path.dirname(sys.path[0]))
@@ -23,9 +28,7 @@ def main(args):
         logger.configure(args.save_dir)
         logger.log("creating model and diffusion...")
     model = load_pretrained_ddpm(args)
-    optimizer = torch.optim.Adam(
-        model.parameters() if not args.freeze_ddpm else model.decoder.parameters(),
-        lr=args.lr)
+    optimizer = torch.optim.Adam(model.decoder.parameters(), lr=args.lr)
     model = DDP(model, device_ids=[local_rank], output_device=local_rank,
                 broadcast_buffers=False, find_unused_parameters=True) if torch.cuda.is_available() else model
     dataset = Dataset(resolution=args.image_size,
@@ -41,7 +44,9 @@ def main(args):
     dataloader = DataLoader(dataset=dataset,
                             num_workers=0)
     iteration = 0 if args.segmentor_dir is None else int(args.segmentor_dir.split("_")[-1].split(".")[0])
+    writer = SummaryWriter()
     for i, batch in enumerate(dataloader):
+        # pred = model(batch["img"], timesteps=torch.tensor([0] * args.batch_size))
         img = batch["img"]
         label = batch["label"]
         support_img = batch["support_img"]
@@ -51,6 +56,18 @@ def main(args):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        writer.add_scalar("Loss/train", loss.item(), iteration)
+        if iteration % args.log_interval == 0:
+            grid_img = make_grid(img[:4], nrow=2, normalize=True, scale_each=True)
+            writer.add_image("Images/img", grid_img, iteration)
+            grid_label = make_grid(label[:4].float().unsqueeze(1), nrow=2, normalize=True, scale_each=True)
+            writer.add_image("Images/label", grid_label, iteration)
+            grid_pred = make_grid(pred[:4].float().unsqueeze(1), nrow=2, normalize=True, scale_each=True)
+            writer.add_image("Images/pred", grid_pred, iteration)
+            grid_support_img = make_grid(support_img[:4], nrow=2, normalize=True, scale_each=True)
+            writer.add_image("Images/support_img", grid_support_img, iteration)
+            grid_support_label = make_grid(support_label[:4].float().unsqueeze(1), nrow=2, normalize=True, scale_each=True)
+            writer.add_image("Images/support_label", grid_support_label, iteration)
         if iteration % args.save_interval == 0:
             dist_util.save_checkpoint(model, args.save_dir, iteration)
         if iteration % args.log_interval == 0:
@@ -61,7 +78,8 @@ def main(args):
         iteration += 1
         if iteration > args.iteration:
             break
-        anneal_lr(optimizer, iteration, args.iteration)
+    writer.close()
+        # anneal_lr(optimizer, iteration, args.iteration)
 
 
 def anneal_lr(optimizer, iteration, total_iteration):
@@ -82,9 +100,10 @@ def load_pretrained_ddpm(args):
     segmentor.requires_grad_(False)
     dist_util.load_checkpoint(args.DDPM_dir, unet)
     dist_util.load_checkpoint(args.segmentor_dir, segmentor)
-    if not args.freeze_ddpm:
-        unet.requires_grad_(True)
+    # unet.requires_grad_(True)
     segmentor.requires_grad_(True)
+    # unet.requires_grad_(False)
+    # unet.eval()
     model = UNetAndDecoder(unet, segmentor)
     return model
 
@@ -97,14 +116,13 @@ if __name__ == "__main__":
     parser.add_argument("--save_dir", type=str, required=True, help="Path to save model")
 
     parser.add_argument("--segmentor_dir", type=str, required=False, help="Path to segmentor directory")
-    parser.add_argument("--DDPM_dir", type=str, required=False, help="Path to pretrained DDPM")
-    parser.add_argument("--freeze_ddpm", action="store_true", help="Freeze DDPM parameters")
+    parser.add_argument("--DDPM_dir", type=str, required=True, help="Path to pretrained DDPM")
 
     parser.add_argument("--image_size", type=int, default=64)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--num_workers", type=int, default=0)
-    parser.add_argument("--iteration", type=int, default=1e4)
-    parser.add_argument("--lr", type=float, default=2e-4)
+    parser.add_argument("--iteration", type=int, default=5e3)
+    parser.add_argument("--lr", type=float, default=1e-4)
 
     parser.add_argument("--save_interval", type=int, default=1000)
     parser.add_argument("--log_interval", type=int, default=1)
@@ -118,5 +136,6 @@ if __name__ == "__main__":
     os.environ.setdefault("MASTER_ADDR", "localhost")
     os.environ.setdefault("WORLD_SIZE", "1")
     os.environ.setdefault("RANK", str(local_rank))
-    dist.init_process_group(backend="nccl" if torch.cuda.is_available() else "gloo", init_method="env://")
+    # dist.init_process_group(backend="nccl" if torch.cuda.is_available() else "gloo", init_method="env://")
+    dist.init_process_group(backend="gloo", init_method="env://")
     main(opts)
