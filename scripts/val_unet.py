@@ -46,7 +46,7 @@ def main(args):
         support_img = torch.tensor(support_img, dtype=torch.float32).to(device)
         support_label = torch.tensor(support_label, dtype=torch.float32).to(device)
         pred = model(img)
-        iou += IoU(pred[:,id+1,:,:], label)
+        iou += IoU(pred[:,id+1,:,:], label, args.threshold)
         pred = pred > args.threshold
         pred = pred[0].cpu().numpy()
         pred = pred.astype("uint8")[0]
@@ -56,9 +56,9 @@ def main(args):
     print("IoU: ", iou.item())
 
 
-def IoU(pred, label):
-    pred = pred > 0.5
-    label = label > 0.5
+def IoU(pred, label, threshold=0.5):
+    pred = pred > threshold
+    label = label > threshold
     return (pred & label).sum() / (pred | label).sum()
 
 
