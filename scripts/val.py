@@ -51,7 +51,7 @@ def main(args):
         iou += IoU(pred, label)
         pred = pred > 0.5
         pred = pred[0].cpu().numpy()
-        pred = pred.astype("uint8")
+        pred = pred.astype("uint8")[0]
         pred = Image.fromarray(pred * 255)
         pred.save(os.path.join(args.save_dir, args.ft_category, batch["name"]))
     iou /= len(dataset)
