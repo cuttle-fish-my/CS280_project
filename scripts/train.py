@@ -1,12 +1,8 @@
 import argparse
 
-import matplotlib.pyplot as plt
 import torch
 import os
 import sys
-import datetime
-import tensorflow as tf
-from tensorflow import keras
 from torchvision.utils import make_grid
 from torch.utils.tensorboard import SummaryWriter
 
