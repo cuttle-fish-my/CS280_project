@@ -128,7 +128,7 @@ if __name__ == "__main__":
     parser.add_argument("--image_size", type=int, default=64)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--num_workers", type=int, default=0)
-    parser.add_argument("--iteration", type=int, default=5e3)
+    parser.add_argument("--iteration", type=int, default=1200)
     parser.add_argument("--lr", type=float, default=1e-4)
 
     parser.add_argument("--save_interval", type=int, default=1000)

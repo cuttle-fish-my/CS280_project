@@ -115,7 +115,8 @@ class COCODataset(Dataset):
             "img": img,
             "label": label,
             "idx": idx,
-            "category": self.category
+            "category": self.category,
+            "name": self.filename_list[idx]
         }
 
     def _load_img_label(self, path):
