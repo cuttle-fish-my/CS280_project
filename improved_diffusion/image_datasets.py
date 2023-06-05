@@ -44,6 +44,8 @@ class COCOCategoryLoaderDataset(Dataset):
             file_list = pickle.load(open(filename_pickle, 'rb'))[key]
             if len(file_list) < num_support + batch_size:
                 continue
+            if key != "person":
+                continue
             dataset = COCODataset(resolution, root, key, value, filename_pickle, num_support=num_support, train=train)
             self.weights.append(len(dataset))
             self.dataLoader.append(

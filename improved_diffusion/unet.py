@@ -1,6 +1,7 @@
 from abc import abstractmethod
 
 import math
+from copy import deepcopy
 from typing import Tuple, List
 
 import numpy as np
@@ -47,7 +48,7 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
             else:
                 x = layer(x)
         return x
-    
+
 
 class DoubleInDoubleOutSequential(nn.Sequential):
     """
@@ -102,7 +103,7 @@ class LabelEmbedding(nn.Module):
 class FiLM(nn.Module):
     """Feature-wise linear modulation."""
 
-    def __init__(self, embed_ch: int, channel_num: int,):
+    def __init__(self, embed_ch: int, channel_num: int, ):
         super().__init__()
         self.emb_ch = embed_ch
         self.channel_num = channel_num
@@ -465,10 +466,10 @@ class DecoderCrossConvBlock(nn.Module):
         assert target.shape[0] == support.shape[0]
         assert target.shape[2:] == support.shape[3:]
         assert Ct + Cs == self.concat_channel
-        if Ct != Cs:
-            print(
-                "WARNING: Ct != Cs, "
-                "the program will proceed but wrong answer will get and you should check the inputs!")
+        # if Ct != Cs:
+        #     print(
+        #         "WARNING: Ct != Cs, "
+        #         "the program will proceed but wrong answer will get and you should check the inputs!")
         target = target[:, None].repeat(1, S, 1, 1, 1)
         # support = support[None].repeat(B, 1, 1, 1, 1)
         concat = torch.cat([target, support], dim=2)
@@ -999,7 +1000,7 @@ class CrossConvolutionDecoder(nn.Module):
             for i in range(num_res_blocks + 1):
                 self.decoder.append(
                     FiLM(
-                        1024, 
+                        1024,
                         ch,
                     )
                 )
@@ -1072,13 +1073,63 @@ class CrossConvolutionDecoder(nn.Module):
         return self.out(target)
 
 
+class SupportEmbedding(nn.Module):
+    def __init__(self, in_channel, model_channel, out_channel, num_support):
+        super().__init__()
+        self.crossconv = DecoderCrossConvBlock(in_channel=in_channel, out_channel=model_channel, kernel_size=3)
+        self.conv = nn.Conv2d(model_channel, out_channel, kernel_size=3, padding=1)
+        self.linear = nn.Linear(out_channel, out_channel)
+
+    def forward(self, img, s_img, s_label):
+        B = img.shape[0]
+        S = s_img.shape[0]
+        support = repeat(torch.cat([s_img, s_label[:, None, ...]], dim=1), "S C H W -> B S C H W", B=B)
+        out, _ = self.crossconv(img, support)  # [B, C, H, W]
+        out = SiLU()(out)
+        out = self.conv(out)  # [B, C, H, W]
+        out = nn.AdaptiveAvgPool2d(1)(out)  # [B, C, 1, 1]
+        out = torch.nn.Flatten()(out)  # [B, SC]
+        out = self.linear(out)  # [B, C]
+        return out
+
+
+class Segmentor(nn.Module):
+    def __init__(self, num_support=5, **kwargs):
+        super().__init__()
+        kwargs["out_channels"] = 1
+        unet = UNetModel(**kwargs)
+        self.model_channels = kwargs["model_channels"]
+        self.emb_channels = kwargs["model_channels"] * 4
+
+        self.model = deepcopy(unet.output_blocks)
+        self.support_embedding = SupportEmbedding(in_channel=(3, 4), model_channel=self.model_channels,
+                                                  out_channel=self.emb_channels, num_support=num_support)
+        self.out = deepcopy(unet.out)
+
+    def forward(self, h, hs, img, s_img, s_label):
+        emb = self.support_embedding(img, s_img, s_label)
+        for module in self.model:
+            cat_in = th.cat([h, hs.pop()], dim=1)
+            h = module(cat_in, emb)
+        return self.out(h)
+
+
 class UNetAndDecoder(nn.Module):
+
     def __init__(self, model: UNetModel, decoder: CrossConvolutionDecoder) -> None:
         super().__init__()
         self.model = model
         self.decoder = decoder
 
-    def forward(self, target: torch.Tensor, support: torch.Tensor, label: torch.Tensor):
+    def forward(self, img, s_img, s_label):
+        timestep = torch.tensor([0] * img.shape[0], device=img.device)
+        result_target = self.model.get_feature_vectors(img, timestep)
+        h = result_target['middle']
+        hs = result_target['down']
+        out = nn.Sigmoid()(self.decoder(h, hs, img, s_img, s_label))
+        return out
+
+    def ori_forward(self, target: torch.Tensor, support: torch.Tensor, label: torch.Tensor):
         """
         Args:
             target: [B, C, H, W]
@@ -1095,7 +1146,7 @@ class UNetAndDecoder(nn.Module):
         result_target = self.model.get_feature_vectors(target, timestep)
         target = result_target['middle']
         hs_t = result_target['down']
-        
+
         assert support.shape[0] == label.shape[0]
         if len(support.shape) == 4:
             timestep = torch.tensor([0] * support.shape[0], device=support.device)

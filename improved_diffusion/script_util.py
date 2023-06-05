@@ -1,4 +1,4 @@
-from .unet import UNetModel, CrossConvolutionDecoder
+from .unet import UNetModel, CrossConvolutionDecoder, Segmentor
 
 
 def get_channel_mult(image_size):
@@ -40,6 +40,42 @@ def create_decoder(
         use_scale_shift_norm=False,
         original_H=image_size,
         original_W=image_size,
+    )
+
+
+def create_segmentor(
+        num_support,
+        image_size,
+        learn_sigma,
+        num_channels,
+        num_res_blocks,
+        num_heads,
+        num_heads_upsample,
+        attention_resolutions,
+        dropout,
+        use_checkpoint,
+        use_scale_shift_norm,
+):
+    channel_mult = get_channel_mult(image_size)
+
+    attention_ds = []
+    for res in attention_resolutions.split(","):
+        attention_ds.append(image_size // int(res))
+
+    return Segmentor(
+        num_support=num_support,
+        in_channels=3,
+        model_channels=num_channels,
+        out_channels=(3 if not learn_sigma else 6),
+        num_res_blocks=num_res_blocks,
+        attention_resolutions=tuple(attention_ds),
+        dropout=dropout,
+        channel_mult=channel_mult,
+        num_classes=None,
+        use_checkpoint=use_checkpoint,
+        num_heads=num_heads,
+        num_heads_upsample=num_heads_upsample,
+        use_scale_shift_norm=use_scale_shift_norm,
     )
 
 
