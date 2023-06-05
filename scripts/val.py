@@ -35,7 +35,7 @@ def main(args):
                       train=False)
     iou = 0
     if not os.path.isdir(os.path.join(args.save_dir, args.ft_category)):
-        os.makedirs(args.save_dir)
+        os.makedirs(os.path.join(args.save_dir, args.ft_category))
     for i in tqdm(range(len(dataset))):
         batch = dataset[i]
         img = batch["img"][None]
