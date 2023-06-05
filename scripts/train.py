@@ -139,6 +139,6 @@ if __name__ == "__main__":
     os.environ.setdefault("MASTER_ADDR", "localhost")
     os.environ.setdefault("WORLD_SIZE", "1")
     os.environ.setdefault("RANK", str(local_rank))
-    # dist.init_process_group(backend="nccl" if torch.cuda.is_available() else "gloo", init_method="env://")
-    dist.init_process_group(backend="gloo", init_method="env://")
+    dist.init_process_group(backend="nccl" if torch.cuda.is_available() else "gloo", init_method="env://")
+    # dist.init_process_group(backend="gloo", init_method="env://")
     main(opts)
