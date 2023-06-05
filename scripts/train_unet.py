@@ -10,6 +10,10 @@ from improved_diffusion import dist_util, logger
 from naive_unet.image_datasets import COCOAllDataset as Dataset
 from naive_unet.unet_model import UNet
 from torch.utils.data import DataLoader
+from torchvision.utils import make_grid
+from torch.utils.tensorboard import SummaryWriter
+
+
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if local_rank == 0:
@@ -27,7 +31,7 @@ def main(args):
     # loss_fn = torch.nn.BCELoss()
     # loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
     loss_fn = torch.nn.CrossEntropyLoss()
-
+    writer = SummaryWriter()
 
     for i, batch in enumerate(dataloader):
         # pred = model(batch["img"], timesteps=torch.tensor([0] * args.batch_size))
@@ -39,6 +43,16 @@ def main(args):
         loss = loss_fn(pred, label.to(device).long())
         loss.backward()
         optimizer.step()
+        writer.add_scalar("Loss/train", loss.item(), iteration)
+        if iteration % args.log_interval == 0:
+            grid_img = make_grid(img[0], nrow=2, normalize=True, scale_each=True)
+            writer.add_image("Images/img", grid_img, iteration)
+            grid_label = make_grid(label[0].float(), nrow=2, normalize=True, scale_each=True)
+            writer.add_image("Images/label", grid_label, iteration)
+            grid_pred = make_grid(torch.argmax(pred[0],dim=-3).float(), nrow=2, normalize=True, scale_each=True)
+            writer.add_image("Images/pred", grid_pred, iteration)
+            # print(grid_img.shape, grid_label.shape, grid_pred.shape)
+
         if iteration % args.save_interval == 0:
             torch.save(model.state_dict(), os.path.join(args.save_dir, f"unet_{iteration}.pt"))
         if iteration % args.log_interval == 0:
@@ -75,7 +89,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--num_workers", type=int, default=0)
     parser.add_argument("--iteration", type=int, default=5e6)
-    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--lr", type=float, default=1e-3)
 
     parser.add_argument("--save_interval", type=int, default=1000)
     parser.add_argument("--log_interval", type=int, default=1)
