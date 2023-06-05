@@ -28,6 +28,7 @@ def main(args):
         logger.log("creating model and diffusion...")
     model = load_pretrained_ddpm(args)
     optimizer = torch.optim.Adam(model.decoder.parameters() if args.freeze_ddpm else model.parameters(), lr=args.lr)
+    # optimizer = torch.optim.NAdam(model.decoder.parameters() if args.freeze_ddpm else model.parameters(), lr=args.lr)
     model = DDP(model, device_ids=[local_rank], output_device=local_rank,
                 broadcast_buffers=False, find_unused_parameters=True) if torch.cuda.is_available() else model
     dataset = Dataset(resolution=args.image_size,
@@ -39,7 +40,8 @@ def main(args):
                       batch_size=args.batch_size,
                       shuffle=True,
                       num_workers=args.num_workers,
-                      drop_last=True)
+                      drop_last=True,
+                      fine_tune_category=args.ft_category,)
     dataloader = DataLoader(dataset=dataset,
                             num_workers=0)
     iteration = 0 if args.segmentor_dir is None else int(args.segmentor_dir.split("_")[-1].split(".")[0])
@@ -133,7 +135,7 @@ if __name__ == "__main__":
     parser.add_argument("--log_interval", type=int, default=10)
 
     parser.add_argument("--num_support", type=int, default=5, help="cardinality of support set")
-
+    parser.add_argument("--ft_category", type=str, default="person", help="category to finetune")
     opts = parser.parse_args()
     if torch.cuda.is_available():
         torch.cuda.set_device(local_rank)

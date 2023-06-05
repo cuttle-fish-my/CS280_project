@@ -20,7 +20,8 @@ class COCOCategoryLoaderDataset(Dataset):
                  batch_size=1,
                  shuffle=True,
                  num_workers=1,
-                 drop_last=True
+                 drop_last=True,
+                 fine_tune_category="person",
                  ):
         """
         :param resolution: resolution of the image
@@ -42,10 +43,10 @@ class COCOCategoryLoaderDataset(Dataset):
         self.weights = []
         for key, value in tqdm(label_id_map.items(), desc="Loading dataset"):
             file_list = pickle.load(open(filename_pickle, 'rb'))[key]
+            if key != fine_tune_category:
+                continue
             if len(file_list) < num_support + batch_size:
                 continue
-            # if key != "person":
-            #     continue
             dataset = COCODataset(resolution, root, key, value, filename_pickle, num_support=num_support, train=train)
             self.weights.append(len(dataset))
             self.dataLoader.append(
