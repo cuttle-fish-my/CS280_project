@@ -45,12 +45,15 @@ def main(args):
         optimizer.step()
         writer.add_scalar("Loss/train", loss.item(), iteration)
         if iteration % args.log_interval == 0:
+            pred_label = torch.argmax(pred[0],dim=-3).float()
             grid_img = make_grid(img[0], nrow=2, normalize=True, scale_each=True)
             writer.add_image("Images/img", grid_img, iteration)
             grid_label = make_grid(label[0].float(), nrow=2, normalize=True, scale_each=True)
             writer.add_image("Images/label", grid_label, iteration)
-            grid_pred = make_grid(torch.argmax(pred[0],dim=-3).float(), nrow=2, normalize=True, scale_each=True)
+            grid_pred = make_grid(pred_label, nrow=2, normalize=True, scale_each=True)
             writer.add_image("Images/pred", grid_pred, iteration)
+            grid_pred_person = make_grid((pred_label == 1).float(), nrow=2, normalize=True, scale_each=True)
+            writer.add_image("Images/pred_person", grid_pred_person, iteration)
             # print(grid_img.shape, grid_label.shape, grid_pred.shape)
 
         if iteration % args.save_interval == 0:
