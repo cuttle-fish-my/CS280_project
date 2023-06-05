@@ -47,7 +47,6 @@ def main(args):
     iteration = 0 if args.segmentor_dir is None else int(args.segmentor_dir.split("_")[-1].split(".")[0])
     writer = SummaryWriter()
     for i, batch in enumerate(dataloader):
-        # pred = model(batch["img"], timesteps=torch.tensor([0] * args.batch_size))
         img = batch["img"]
         label = batch["label"]
         support_img = batch["support_img"]
@@ -123,7 +122,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_dir", type=str, required=True, help="Path to save model")
 
     parser.add_argument("--segmentor_dir", type=str, required=False, help="Path to segmentor directory")
-    parser.add_argument("--DDPM_dir", type=str, required=True, help="Path to pretrained DDPM")
+    parser.add_argument("--DDPM_dir", type=str, required=False, help="Path to pretrained DDPM")
     parser.add_argument("--freeze_ddpm", action="store_true", help="Freeze DDPM")
 
     parser.add_argument("--image_size", type=int, default=64)
