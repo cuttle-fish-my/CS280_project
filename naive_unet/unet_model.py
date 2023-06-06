@@ -106,7 +106,7 @@ class UNet(nn.Module):
         x = self.up3(x, x2)
         x = self.up4(x, x1)
         logits = self.outc(x)
-        return torch.softmax(logits, dim=-3)
+        return torch.sigmoid(logits)
 
     def use_checkpointing(self):
         self.inc = torch.utils.checkpoint(self.inc)
