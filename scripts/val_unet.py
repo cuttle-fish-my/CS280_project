@@ -45,8 +45,8 @@ def main(args):
         label = torch.tensor(label, dtype=torch.float32).to(device)
         support_img = torch.tensor(support_img, dtype=torch.float32).to(device)
         support_label = torch.tensor(support_label, dtype=torch.float32).to(device)
-        pred = model(img)
-        iou += IoU(pred[:,id+1,:,:], label, args.threshold)
+        pred = model(img).squeeze(0)
+        iou += IoU(pred, label, args.threshold)
         pred = pred > args.threshold
         pred = pred[0].cpu().numpy()
         pred = pred.astype("uint8")[0]
@@ -63,7 +63,7 @@ def IoU(pred, label, threshold=0.5):
 
 
 def create_unet(args):
-    model = UNet(3, args.num_categories)
+    model = UNet(3, 1)
     return model
 
 
